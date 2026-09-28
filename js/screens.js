@@ -232,6 +232,11 @@ G.screens = (function () {
       const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
       const dir = bt(12) || ay < -0.55 ? 'u' : bt(13) || ay > 0.55 ? 'd' : bt(14) || ax < -0.55 ? 'l' : bt(15) || ax > 0.55 ? 'r' : null;
       const A = bt(0), B = bt(1) || bt(9) && G.scene === 'run';
+      if (G.inspect && G.inspect.isOpen()) {   // 拡大ビューア on top: ←/→ step, A/B close
+        if (dir && gp.held.dir !== dir && (dir === 'l' || dir === 'r')) G.inspect.step(dir === 'l' ? -1 : 1);
+        if ((A && !gp.held.A) || (B && !gp.held.B)) G.inspect.close();
+        gp.held.dir = dir; gp.held.A = A; gp.held.B = B; return;
+      }
       if (rt) {
         if (dir) {
           if (gp.held.dir !== dir || now >= gp.next) {
@@ -452,6 +457,7 @@ G.screens = (function () {
         if (sil) { sfx('ui'); charDialog(id); return; }
         sfx('ui'); if (selChar !== id) { selChar = id; saveSel(); home(); }
       });
+      if (G.inspect) { G.inspect.bindHold(b, () => inspectChars(id, b)); b.title = '長押し / 右クリックで大きく見る'; }
       return hoverable(b);
     }));
 
@@ -462,7 +468,7 @@ G.screens = (function () {
       el('div', { class: 'hero-stage' },
         el('div', { class: 'hero-glow', style: `background:radial-gradient(circle, ${elInfo.color}66, ${elInfo.color}22 45%, transparent 70%)` }),
         el('div', { class: 'hero-circle' }), embers,
-        el('img', { class: 'hero-img', src: icon(ch.portrait || ch.id), alt: ch.name }),
+        heroImg(ch),
         el('div', { class: 'hero-name enter-l', style: '--d:.25s' },
           el('div', { class: 'stars' }, '★★★★'),
           el('h3', null, ch.name),
@@ -569,6 +575,7 @@ G.screens = (function () {
         selStage = d.id; saveSel();
         const scroll = body.scrollTop; home(); const nb = G.ui.root.querySelector('.tab-body'); if (nb) nb.scrollTop = scroll;
       });
+      if (G.inspect) { G.inspect.bindHold(b, () => inspectStages(d.id, b)); b.title = '長押し / 右クリックで大きく見る'; }
       return hoverable(b);
     }));
   }
@@ -648,11 +655,13 @@ G.screens = (function () {
             el('span', { class: 'chip' }, '最多撃破 ' + U.fmtNum(rc.kills || 0)),
             el('span', { class: 'chip' }, 'クリア ' + (rc.clears || 0) + '回'))),
         guideCard(),
-        el('div', { class: 'kit' }, ch.kit ? ch.kit.map(r => kitRow(r[0], r[1], r[2], r[3])) : [
-          kitRow('amber_arrow', '通常攻撃', ch.normalName || '炎の矢', '近くの敵へ自動で炎の矢を放つ。当たると爆発！'),
-          kitRow('bunny', '元素スキル　F / 右下ボタン', ch.skillName || 'ウサギ伯爵', 'ウサギ伯爵を置いて敵を引きつけ、大爆発させる。'),
-          kitRow('rain', '元素爆発　Q / 右下ボタン', ch.burstName || '矢の雨', 'エネルギーが満タンで発動。広い範囲に炎の矢の雨！'),
-          kitRow('crystal', '固有天賦', 'ぜんぶ大きく爆発', ch.passive || '爆発範囲がいつも2倍。')]));
+        el('div', { class: 'kit' }, kitRows(ch).map(r => kitRow(r[0], r[1], r[2], r[3]))));
+      if (G.inspect) {
+        const sc = inner.querySelector('.stage-card'); if (sc) G.inspect.bindTap(sc, () => inspectStages(selStage, sc), 'ステージを大きく見る');
+        const rows = [...inner.querySelectorAll('.kit-row')], kr = kitRows(ch), col = (G.EL[ch.element] || {}).color;
+        rows.forEach((n, i) => G.inspect.bindTap(n, () => G.inspect.open({ index: i, from: n.querySelector('.ki'),
+          list: kr.map((r, j) => ({ img: kitSrc(r[0]), title: r[2], sub: r[1], body: G.inspect.sec('', G.inspect.esc(r[3])), color: col, from: rows[j] && rows[j].querySelector('.ki') })) })));
+      }
     } else if (k === 'meta') ext(G.progressionUI && G.progressionUI.renderMeta, '育成');
     else if (k === 'const') ext(G.progressionUI && G.progressionUI.renderConstellation, '命ノ星座');
     else if (k === 'relic') ext(G.relics && G.relics.renderPanel, '聖遺物');
@@ -673,6 +682,7 @@ G.screens = (function () {
             el('span', { class: 'rs-v' }, el('small', null, 'クリア'), (rc.clears || 0) + '回'),
             el('span', { class: 'rs-badge' }, cl ? 'CLEAR' : open ? '挑戦中' : '未解放'));
         })));
+      if (G.inspect) inner.querySelectorAll('.rec-st').forEach((n, i) => { const id = stList()[i].id; G.inspect.bindTap(n, () => inspectStages(id, n.querySelector('img') || n)); });
     }
   }
   /* ---- 強化ガイド: what Mora can buy right now. Reads only data (G.data.meta / metaTree / metaCost,
@@ -737,8 +747,55 @@ G.screens = (function () {
     return hoverable(card);
   }
 
+  function kitSrc(ic) { return G.proceduralIcons && G.proceduralIcons[ic] && G.hudIconUrl ? G.hudIconUrl(ic) : icon(ic); }
+  function kitRows(ch) {
+    return ch.kit ? ch.kit : [
+      ['amber_arrow', '通常攻撃', ch.normalName || '炎の矢', '近くの敵へ自動で炎の矢を放つ。当たると爆発！'],
+      ['bunny', '元素スキル　F / 右下ボタン', ch.skillName || 'ウサギ伯爵', 'ウサギ伯爵を置いて敵を引きつけ、大爆発させる。'],
+      ['rain', '元素爆発　Q / 右下ボタン', ch.burstName || '矢の雨', 'エネルギーが満タンで発動。広い範囲に炎の矢の雨！'],
+      ['crystal', '固有天賦', 'ぜんぶ大きく爆発', ch.passive || '爆発範囲がいつも2倍。']];
+  }
+  function heroImg(ch) {
+    const im = el('img', { class: 'hero-img', src: icon(ch.portrait || ch.id), alt: ch.name });
+    if (G.inspect) G.inspect.bindTap(im, () => inspectChars(ch.id, im), ch.name + ' を大きく見る');
+    return im;
+  }
+  /* ---- 拡大ビューア (js/inspect.js): characters / stages. Silhouettes stay black + 「？？？」, closed stages stay dark + 「？？？」 ---- */
+  function charInspect(id) {
+    const I = G.inspect, c = G.data.characters[id]; if (!c) return { title: '？？？' };
+    const E = G.EL[c.element] || {}, cs = charSt(id);
+    const base = { img: icon(c.portrait || id), photo: true, color: E.color || '#d3bc8e', sub: '◆ ' + (E.name || '') + '元素 ・ ' + (c.weapon || '') };
+    if (c.implemented && cs !== 'open') {
+      const u = UL(), conds = u ? u.conds(id) : [];
+      return Object.assign(base, { locked: true, title: '？？？', lv: cs === 'buyable' ? '解放できる！' : '未解放',
+        body: I.sec('', cs === 'buyable' ? '条件クリア！ 解放すると 正体がわかるよ！' : 'まだ 影しか見えない…。条件をクリアすると 仲間にできるよ！')
+          + (conds.length ? I.sec('解放条件', conds.map(k => (k.ok ? '✓ ' : '・ ') + I.esc(k.text)).join('<br>')) : '') });
+    }
+    const kit = kitRows(c);
+    return Object.assign(base, { title: c.name, sub: base.sub + (c.title ? ' ・ ' + I.esc(c.title) : ''), lv: c.implemented ? (id === selChar ? '✔ 選択中' : '') : '準備中',
+      body: (c.blurb ? I.sec('', I.esc(c.blurb)) : '') + I.sec('わざ', kit.map(r => '<b>' + I.esc(r[2]) + '</b>　<small style="display:inline;color:#ece5d8aa">' + I.esc(r[1].split('　')[0]) + '</small>').join('<br>')) });
+  }
+  function inspectChars(id, from) {
+    const ids = (G.data.roster || ['amber']).filter(k => G.data.characters[k]);
+    const cardOf = k => G.ui.root.querySelector('.r-card[data-char="' + k + '"]');
+    G.inspect.open({ index: Math.max(0, ids.indexOf(id)), from, list: ids.map(k => () => Object.assign(charInspect(k), { from: k === id ? from : cardOf(k) })) });
+  }
+  function stageInspect(id) {
+    const I = G.inspect, d = stg(id), open = stOpen(id), cl = stCleared(id), rc = stRec(id), known = open || cl;
+    const boss = `<img src="${icon(d.boss)}" width="34" height="34" alt=""${known ? '' : ' class="sil"'}>` + (known ? I.esc(d.bossName || '') : '？？？');
+    const base = { img: 'assets/' + d.bgSmall + '.webp', wide: true, color: d.color || '#d3bc8e', badge: boss, sub: 'STAGE ' + d.order + (known && d.region ? ' ・ ' + I.esc(d.region) : '') };
+    if (!open) return Object.assign(base, { dim: true, title: '？？？', lv: '未解放', body: I.sec('解放条件', I.esc(UL() ? UL().stageCond(id) : '準備中')) });
+    return Object.assign(base, { title: d.name, lv: cl ? 'CLEAR' : id === selStage ? '✔ 選択中' : '挑戦中', lvMax: cl,
+      body: I.sec('目標', Math.round((d.duration || 600) / 60) + '分生きのこり、' + I.esc(d.bossName || 'ボス') + 'を倒せ！') + (d.blurb ? I.sec('', I.esc(d.blurb)) : '')
+        + '<div class="insp-chips"><span>強さ ' + STARS(d.stars || d.order) + '</span><span>最長 ' + U.fmtTime(rc.best || 0) + '</span><span>最多撃破 ' + U.fmtNum(rc.kills || 0) + '</span><span>クリア ' + (rc.clears || 0) + '回</span></div>' });
+  }
+  function inspectStages(id, from) {
+    const ids = stList().map(d => d.id);
+    const cardOf = k => G.ui.root.querySelector('.stg-card[data-stage="' + k + '"]');
+    G.inspect.open({ index: Math.max(0, ids.indexOf(id)), from, list: ids.map(k => () => Object.assign(stageInspect(k), { from: k === id ? from : cardOf(k) })) });
+  }
   function kitRow(ic, kind, name, desc) {
-    const src = G.proceduralIcons && G.proceduralIcons[ic] && G.hudIconUrl ? G.hudIconUrl(ic) : icon(ic);
+    const src = kitSrc(ic);
     return el('div', { class: 'kit-row' }, el('div', { class: 'ki' }, el('img', { src, alt: '' })),
       el('div', null, el('span', { class: 'kt' }, kind), el('b', null, name), el('small', null, desc)));
   }
@@ -944,7 +1001,7 @@ G.screens = (function () {
     const who = up.cat === 'char' && up.char && G.data.characters[up.char] ? G.data.characters[up.char].name + '専用' : CATN[up.cat] || '';
     const lvTxt = isEvo ? '進化済み' : bless ? '★5' : lv >= max ? 'Lv.' + lv + ' MAX' : 'Lv.' + lv + ' / MAX ' + max;
     const box = el('div', { class: 'sk-in' },
-      el('div', { class: 'sk-hd' }, el('span', { class: 'sk-ic', html: artH(evoKey || key) }),
+      el('div', { class: 'sk-hd' }, el('span', { class: 'sk-icw' }, el('span', { class: 'sk-ic', html: artH(evoKey || key) })),
         el('div', { class: 'sk-tt' }, el('small', null, who), el('b', null, up.name || key)),
         el('span', { class: 'sk-lv' + (lv >= max || isEvo || bless ? ' max' : '') }, lvTxt)));
     if (!isEvo && !bless && max > 1) box.append(el('div', { class: 'sk-pips' }, Array.from({ length: max }, (_, i) => el('i', { class: i < lv ? 'on' : '' }))));
@@ -970,6 +1027,10 @@ G.screens = (function () {
     const node = el('div', { class: 'sk-pop', role: 'dialog', 'aria-label': (G.upgrades[key].name || '') + ' の説明' },
       el('button', { class: 'sk-x', type: 'button', 'aria-label': '閉じる', onclick: () => closeSkillPop() }, '✕'), skillPopBody(R, key, evoKey));
     document.body.append(node);
+    if (G.inspect) {
+      const ic = node.querySelector('.sk-ic'), zoom = () => inspectBuild(R, src, ic);
+      G.inspect.bindTap(ic, zoom, '大きく見る'); G.inspect.lens(node.querySelector('.sk-icw'), zoom);
+    }
     src.classList.add('sk-on'); src.setAttribute('aria-expanded', 'true');
     // place next to the icon (below, else above), clamped to the screen; phones: whichever side has more room
     const r = src.getBoundingClientRect(), W = innerWidth, H = innerHeight, m = 8;
@@ -988,7 +1049,7 @@ G.screens = (function () {
     const onKey = e => { if (e.code === 'Escape' || e.key === 'Escape' || e.code === 'Backspace') { e.preventDefault(); e.stopPropagation(); closeSkillPop(); } };
     const onDown = e => {
       const t = e.target;
-      if (node.contains(t)) return;
+      if (node.contains(t) || (t && t.closest && t.closest('.insp'))) return;   // taps inside the 拡大ビューア keep the popover
       const hit = t && t.closest && t.closest('[data-key]');
       if (hit && hit === src) return;               // same icon → the click toggles it closed
       closeSkillPop();
@@ -1002,6 +1063,14 @@ G.screens = (function () {
     const watch = () => { if (!spop || spop.node !== node) return; if (!src.isConnected || (host && host.classList.contains('closing'))) { closeSkillPop(true); return; } spop.raf = requestAnimationFrame(watch); };
     spop = { node, src, onKey, onDown, raf: requestAnimationFrame(watch) };
   }
+  /** 拡大ビューア over every skill of the pause menu (same order as the icons); `from` = the element it zooms out of */
+  function inspectBuild(R, src, from) {
+    if (!G.inspect) return;
+    const host = src.closest('.pause-panel') || document;
+    const nodes = [...host.querySelectorAll('.pg-bi[data-key], .b-item[data-key]')];
+    G.inspect.open({ index: Math.max(0, nodes.indexOf(src)), from: from || src,
+      list: nodes.map(n => () => G.inspect.skill(n.dataset.key, { mode: 'run', R, evoKey: n.dataset.evo, from: n === src && from ? from : n })) });
+  }
   /** makes every skill icon of the pause menu (renderBuild .pg-bi / fallback .b-item) a tappable button */
   function wireSkillIcons(R, root) {
     root.querySelectorAll('.pg-bi[data-key], .b-item[data-key]').forEach(n => {
@@ -1011,6 +1080,7 @@ G.screens = (function () {
       n.removeAttribute('title');
       n.addEventListener('click', e => { e.stopPropagation(); openSkillPop(R, n, n.dataset.key, n.dataset.evo); });
       n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openSkillPop(R, n, n.dataset.key, n.dataset.evo); } });
+      if (G.inspect) G.inspect.bindHold(n, () => { closeSkillPop(true); inspectBuild(R, n); });   // long-press / right-click → big view
     });
   }
   /** スキルブック as a modal (pause menu: the run stays paused; 閉じる / Esc returns to the pause menu) */
@@ -1067,7 +1137,7 @@ G.screens = (function () {
     // damage sources
     const src = Object.entries(R.damageBySrc || {}).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
     const maxD = src.length ? src[0][1] : 1;
-    const bars = [];
+    const bars = [], dmgInfo = [];
     const dmgList = src.length ? src.map(([k, v]) => {
       const cb = G.combat || {};
       const up = G.upgrades[k];
@@ -1077,8 +1147,17 @@ G.screens = (function () {
       const gold = (up && up.cat === 'bless') || !!G.upgrades['bless_' + k];
       const col = gold ? '#ffcf6b' : upEl && G.EL[upEl] ? G.EL[upEl].color : G.EL[k] ? G.EL[k].color : REACT_COL[k] || '#ff9a4a';
       const bar = el('i', { style: `--c:${col}` }); bars.push([bar, v / maxD]);
+      dmgInfo.push({ k, v, name, ic, col, up });
       return el('div', { class: 'dmg-row' + (gold ? ' gold' : '') }, el('img', { src: icon(ic), alt: '' }), el('div', { class: 'dn' }, el('b', null, name), el('div', { class: 'dmg-bar' }, bar)), el('span', { class: 'dv' }, U.fmtNum(v)));
     }) : [el('div', { class: 'b-empty' }, '記録なし')];
+    const totalD = dmgInfo.reduce((a, x) => a + x.v, 0) || 1;
+    if (G.inspect && dmgInfo.length) dmgList.forEach((row, i) => G.inspect.bindTap(row, () => G.inspect.open({ index: i, from: row.querySelector('img'),
+      list: dmgInfo.map((x, j) => () => {
+        const I = G.inspect, lv = x.up && R.levels ? (R.levels[x.k] || 0) : 0;
+        const fx = x.up && x.up.desc ? I.sec(x.up.cat === 'evo' || x.up.cat === 'bless' ? '効果' : 'Lv.' + Math.max(1, lv) + ' の効果', I.nl(x.up.desc(Math.max(1, lv)))) : '';
+        return { img: icon(x.ic), title: x.name, sub: 'ダメージ内訳　' + (j + 1) + '位', lv: U.fmtNum(x.v) + ' ダメージ', color: x.col, from: dmgList[j] && dmgList[j].querySelector('img'),
+          body: I.sec('', 'この冒険のダメージの <b>' + Math.round(x.v / totalD * 100) + '%</b>（上位' + dmgInfo.length + 'つの中で）') + fx };
+      }) })));
     const sd = stg(R.stageId || 'mondstadt');
     const GOD = { venti: '風神', zhongli: '岩神', raiden: '雷神', nahida: '草神' };
     const heads = {

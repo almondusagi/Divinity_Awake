@@ -154,7 +154,23 @@ G.relics = (function () {
         <div class="pg-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>${UI.stars(p.rarity)}
         <div class="pg-rs">${o.full ? SLOT[p.slot].name : ''}${o.full ? '<br>' : ''}${label(p.main.k, p.main.v)}</div>`;
       b.addEventListener('click', () => detail(p));
+      if (G.inspect) G.inspect.bindHold(b, () => zoomPiece(p, b));
       return b;
+    }
+    /* 拡大ビューア: equipped + owned pieces, ←/→ through them */
+    function pieceOpts(p) {
+      const I = G.inspect, r = data(), eqd = r.equipped[p.slot] === p.id;
+      return { html: `<div class="insp-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>`, title: SLOT[p.slot].name, color: SETS[p.set].c,
+        sub: SETS[p.set].name + ' ' + UI.stars(p.rarity), lv: label(p.main.k, p.main.v), lvMax: p.rarity >= 5,
+        body: (eqd ? I.sec('', '<b>✔ 装備中</b>' + (p.lock ? '　🔒 ロック' : '')) : p.lock ? I.sec('', '🔒 ロック中') : '')
+          + I.sec('サブステータス', p.subs.map(x => label(x.k, x.v)).join('<br>') || 'なし')
+          + I.sec(SETS[p.set].name, '2セット: ' + setText(p.set, 'b2') + '<br>4セット: ' + setText(p.set, 'b4') + '<small>' + ch.name + 'のときの効果</small>') };
+    }
+    function zoomPiece(p, from) {
+      const r = data(), eqIds = new Set(Object.values(r.equipped));
+      const list = r.owned.slice().sort((a, b) => (eqIds.has(b.id) - eqIds.has(a.id)) || (b.rarity - a.rarity) || (score(b) - score(a)));
+      const i = Math.max(0, list.indexOf(p));
+      G.inspect.open({ index: i, from, list: list.map(x => () => Object.assign(pieceOpts(x), { from: x === p ? from : null })) });
     }
     function draw() {
       const r = data(), sm = summary();
@@ -173,6 +189,8 @@ G.relics = (function () {
       if (!list.length) inv.innerHTML = '<div class="pg-empty">遺物はまだありません。遺跡守衛やウェンティをたおそう！</div>';
       for (const p of list) inv.append(pieceTile(p, { eq: eqIds.has(p.id) }));
       root.querySelector('.pg-open').addEventListener('click', openAnim);
+      if (G.inspect) { const bi = root.querySelector('.pg-rbox img'); G.inspect.bindTap(bi, () => G.inspect.open({ from: bi, img: 'assets/icon_relic.webp', title: 'モンドの遺物', sub: '未開封 ×' + r.unopened, color: '#9fe8c8',
+        body: G.inspect.sec('', 'ボスをたおすと 手に入る。「開く！」で 中身がわかるよ') + G.inspect.sec('部位', SLOTS.map(x => x.name).join('・')) }), '大きく見る'); }
       root.querySelector('.pg-salv').addEventListener('click', () => {
         const n = salvageMany(p => p.rarity === 4 && !p.lock && !eqIds.has(p.id));
         if (!n) { G.audio.sfx('denied'); return; }
@@ -199,6 +217,7 @@ G.relics = (function () {
         <button class="pg-btn a-salv" ${p.lock || eqd ? 'disabled' : ''}>分解 +${p.rarity === 5 ? 120 : 40}</button>
         <button class="pg-btn a-x">とじる</button></div></div>`;
       const shut = () => ov.remove();
+      if (G.inspect) { const rg = ov.querySelector('.pg-rtop2 .pg-rg'); G.inspect.bindTap(rg, () => zoomPiece(p, rg), '大きく見る'); G.inspect.lens(rg, () => zoomPiece(p, rg)); }
       ov.addEventListener('click', e => { if (e.target === ov) shut(); });
       ov.querySelector('.a-x').addEventListener('click', () => { G.audio.sfx('ui'); shut(); });
       ov.querySelector('.a-eq').addEventListener('click', () => { r.equipped[p.slot] = p.id; G.save.write(); G.audio.sfx('relic'); shut(); draw(); });

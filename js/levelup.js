@@ -182,6 +182,7 @@ G.progressionUI = (function () {
 .pg-slot .pg-card{width:100%;min-height:clamp(210px,50vh,330px);opacity:0;animation:none;pointer-events:none;cursor:default}
 .pg-slot.show .pg-card{animation:pgRise .45s cubic-bezier(.2,1.3,.4,1) forwards}
 .pg-slot.instant .pg-card{animation:none;opacity:1}
+.pg-slot.show .pg-card .insp-lens,.pg-slot.instant .pg-card .insp-lens{pointer-events:auto}
 .pg-slot.instant .pg-pillar{opacity:.3}
 @keyframes pgRise{0%{opacity:0;transform:translateY(40px) scale(.7);filter:brightness(3)}100%{opacity:1;transform:none;filter:none}}
 .pg-evo-banner{position:absolute;left:0;right:0;top:18%;text-align:center;pointer-events:none;z-index:5;font-weight:900;font-style:italic;font-size:clamp(44px,12vh,96px);letter-spacing:.08em;
@@ -590,6 +591,16 @@ G.progressionUI = (function () {
     return b;
   }
 
+  /* 拡大ビューア (js/inspect.js): a small magnifier on the card + long-press / right-click. The tap itself still picks. */
+  function cardZoom(card, R, keys, i, levelOf, guard) {
+    const I = G.inspect; if (!I) return;
+    const artOf = j => { const c = card.parentNode && card.parentNode.children[j]; return c ? c.querySelector('.pg-art') || c : null; };
+    const zoom = () => { if (guard && !guard()) return; I.open({ index: i, from: card.querySelector('.pg-art') || card,
+      list: keys.map((k, j) => () => I.skill(k, { mode: 'card', R, next: levelOf(k), from: j === i ? card.querySelector('.pg-art') : artOf(j) })) }); };
+    const top = card.querySelector('.pg-top') || card;
+    I.lens(top, zoom, card.querySelector('.pg-evob') ? 'up' : '');
+    I.bindHold(card, zoom);
+  }
   function sparks(parent, x, y, n, color, spread) {
     if (G.save.data.settings.reducedFx) n = Math.ceil(n / 3);
     const box = document.createElement('div'); box.className = 'pg-sparks'; parent.append(box);
@@ -665,6 +676,7 @@ G.progressionUI = (function () {
         c.dataset.pick = key; c.style.setProperty('--d', d + 's');
         c.addEventListener('click', () => pick(i));
         c.addEventListener('pointerenter', () => { setSel(i); G.audio.sfx('uiHover'); });
+        cardZoom(c, R, cur, i, k => k[0] === '_' ? 1 : (R.levels[k] || 0) + 1, () => !done);
         const land = document.createElement('i'); land.className = 'pg-land'; c.append(land);
         box.append(c);
         if (fx >= 5) gold = true;
@@ -765,6 +777,8 @@ G.progressionUI = (function () {
       const c = g.choice ? choiceCard() : makeCard(R, g.key, { level: Math.max(1, g.level), isNew: g.isNew, result: true, tag: 'div' });
       s.append(c); reveal.append(s); return s;
     });
+    const resultZoom = (card, i) => { const shown = got.filter(x => !x.choice); cardZoom(card, R, shown.map(x => x.key), shown.indexOf(got[i]), k => Math.max(1, (got.find(x => x.key === k) || {}).level || R.levels[k] || 1)); };
+    slots.forEach((s, i) => { if (!got[i].choice) resultZoom(s.querySelector('.pg-card'), i); });
     reveal.style.display = 'none';
     function emitEvo(g) { if (g.evo && !g.emitted) { g.emitted = true; G.bus.emit('evolution', { key: g.key }); } }
     /* rules v6: a chest may hold one 「えらべる！」 slot — the only way to gain a NEW launcher (max 2 kinds per run).
@@ -790,6 +804,7 @@ G.progressionUI = (function () {
         c.addEventListener('click', ev => { ev.stopPropagation(); pick(i); });
         c.addEventListener('pointerenter', () => G.audio.sfx('uiHover'));
         box.append(c);
+        cardZoom(c, R, g.options, i, k => (R.levels[k] || 0) + 1, () => !picked);
         setTimeout(() => { if (c.isConnected && !picked) G.audio.sfx('chestReveal', { rarity: (G.progression.def(key) || {}).rarity || 3 }); }, (0.3 + i * 0.13) * 1000);
       });
       panel.addEventListener('click', ev => ev.stopPropagation());
@@ -810,7 +825,8 @@ G.progressionUI = (function () {
           panel.classList.add('out'); setTimeout(() => panel.remove(), 320);
           const old = slot.querySelector('.pg-card'); if (old) old.remove();
           slot.style.setProperty('--rc', RC[fx]);
-          slot.append(makeCard(R, key, { level: Math.max(1, g.level), isNew: g.isNew, result: true, tag: 'div' }));
+          const nc = makeCard(R, key, { level: Math.max(1, g.level), isNew: g.isNew, result: true, tag: 'div' }); slot.append(nc);
+          if (G.inspect) cardZoom(nc, R, [key], 0, () => Math.max(1, g.level || R.levels[key] || 1));
           slot.classList.remove('instant', 'show'); void slot.offsetWidth; slot.classList.add('show');
           G.audio.sfx('chestReveal', { rarity: fx });
           setTimeout(() => { const q = slot.getBoundingClientRect(); sparks(ov, q.left + q.width / 2, q.top + q.height * 0.3, fx >= 4 ? 30 : 16, RC[fx], 200); }, 40);
@@ -1047,6 +1063,7 @@ G.progressionUI = (function () {
         const k = g.dataset.node;
         g.addEventListener('click', () => { if (sel === k) { buy(k); return; } sel = k; G.audio.sfx('uiHover'); draw(); });
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (sel === k) buy(k); else { sel = k; draw(); } } });
+        if (G.inspect) G.inspect.bindHold(g, () => zoomMeta(k));
       });
       prog.innerHTML = `<b>★ ${have}</b> / ${total}` + (canN ? ` <em class="st-can">強化できる星 ×${canN}！</em>` : isFinite(minNeed) ? ` <em>次の強化まで あと <img src="assets/icon_mora.webp" alt="">${U.fmtNum(minNeed)}</em>` : '');
       drawInfo();
@@ -1068,7 +1085,23 @@ G.progressionUI = (function () {
         <div class="st-name"><i class="pg-orb" style="--c:${col}">${glyph(d.glyph)}</i><span>${d.name}</span>${up}</div>
         ${plain ? `<div class="st-desc">${d.desc}</div>` : ''}${d.max === 1 ? '' : fx}<div class="st-act">${act}</div>`;
       const b = info.querySelector('.st-buy'); if (b) b.addEventListener('click', () => buy(k));
+      if (G.inspect) G.inspect.lens(info.querySelector('.st-name'), () => zoomMeta(k), 'inl');
     }
+    /* 拡大ビューア: every star of the map, ←/→ through them */
+    function metaOpts(k) {
+      const I = G.inspect, d = DEF(k), n = NODES[k], l = lvOf(k), st = state(k), col = TR.branches[n.br].c, cost = costOf(k);
+      const parName = n.parent === 'root' ? '' : DEF(n.parent).name, plain = d.max === 1 || k === 'reroll' || d.keystone;
+      let body = plain ? I.sec('効果', d.desc || '') : '';
+      if (d.max !== 1) body += l < d.max ? I.sec('いま → 次のLv.' + (l + 1), metaLine(k, d, l) + '　→　' + metaLine(k, d, l + 1), 'nx') : I.sec('いまの効果', metaLine(k, d, l));
+      if (d.max > 1 && l + 1 < d.max) body += I.sec('MAX（Lv.' + d.max + '）', metaLine(k, d, d.max), 'dim');
+      const mora = '<img src="assets/icon_mora.webp" width="18" height="18" alt="" style="vertical-align:-3px">';
+      body += st === 'max' ? I.sec('', 'MAX！ これ以上は強くならないよ', 'mx') : st === 'locked' ? I.sec('', '先に「' + parName + '」を Lv1 にしよう')
+        : I.sec('つぎの強化', mora + ' ' + U.fmtNum(cost) + ' モラ' + (st === 'can' ? '　<b>★ いま強化できる！</b>' : '（あと ' + U.fmtNum(cost - (S.mora || 0)) + '）'));
+      return { html: `<i class="pg-orb" style="--c:${col}">${glyph(d.glyph)}</i>`, title: d.name, color: col, body,
+        sub: TR.branches[n.br].name + (n.br === 'char' ? ' ・ ' + CH.name + '専用' : '') + (d.keystone ? ' ・ 要の星' : ''),
+        lv: l >= d.max ? 'MAX' : 'Lv.' + l + ' / ' + d.max, lvMax: l >= d.max, from: svg.querySelector(`.st-node[data-node="${k}"] .st-core`) };
+    }
+    function zoomMeta(k) { G.inspect.open({ index: Math.max(0, keys.indexOf(k)), list: keys.map(x => () => metaOpts(x)) }); }
     function buy(key) {
       const d = DEF(key), lv = lvOf(key), st = state(key);
       if (st === 'max') return;
@@ -1139,7 +1172,7 @@ G.progressionUI = (function () {
           <text y="33" text-anchor="middle" font-size="12" font-weight="900" fill="${i < n ? col : '#9fb0d0'}">C${i + 1}</text></g>`;
       });
       svg.innerHTML = h;
-      svg.querySelectorAll('.pg-node').forEach(g => g.addEventListener('click', () => { sel = +g.dataset.i; G.audio.sfx('uiHover'); draw(); }));
+      svg.querySelectorAll('.pg-node').forEach(g => { g.addEventListener('click', () => { sel = +g.dataset.i; G.audio.sfx('uiHover'); draw(); }); if (G.inspect) G.inspect.bindHold(g, () => zoomCons(+g.dataset.i)); });
       const c = C[sel], owned = sel < n, isNext = sel === n, cost = c.cost;
       info.innerHTML = `<div class="pg-cn">第${sel + 1}重 ・ C${sel + 1}</div><h4>${c.name}</h4><p>${c.text}</p>
         <div class="pg-cstate">${owned ? '<span style="color:#7dff8a">✓ 解放済み</span>' : isNext ? '' : `<span style="color:#9fb0d0">先に C${n + 1} を解放しよう</span>`}</div>
@@ -1147,8 +1180,24 @@ G.progressionUI = (function () {
         <div class="pg-clist">${C.map((x, i) => `<span class="${i < n ? 'on' : ''}">C${i + 1} ${x.short}${i < n ? ' ✓' : ''}</span>`).join('')}</div>`;
       const b = info.querySelector('.pg-cbuy');
       if (b) { if ((G.save.data.mora || 0) < cost) b.classList.add('poor'); b.addEventListener('click', () => unlock(sel)); }
+      if (G.inspect) { const h = info.querySelector('h4'); h.style.cssText = 'display:flex;align-items:center;gap:8px'; G.inspect.lens(h, () => zoomCons(sel), 'inl'); }
       purse(pEl);
     }
+    /* 拡大ビューア: C1–C6 */
+    function consOpts(i) {
+      const I = G.inspect, n = lvl(), c = C[i], owned = i < n, isNext = i === n;
+      const fill = owned ? col : isNext ? '#9fb8ff' : '#56627d';
+      const html = `<svg class="insp-cstar" viewBox="-40 -40 80 80" aria-hidden="true"><defs><radialGradient id="inspCg"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="${col}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient></defs>`
+        + (owned || isNext ? `<circle r="39" fill="url(#inspCg)" opacity="${owned ? 0.75 : 0.35}"/>` : '')
+        + `<circle r="23" fill="#0b1430" stroke="${owned ? col : '#8ea2d0'}" stroke-width="2"/><path transform="translate(-16.5 -16.5) scale(1.38)" fill="${fill}" d="M12 1.6l3.1 6.9 7.5.8-5.6 5 1.6 7.4L12 17.9l-6.6 3.8L7 14.3l-5.6-5 7.5-.8z"/></svg>`;
+      const mora = '<img src="assets/icon_mora.webp" width="18" height="18" alt="" style="vertical-align:-3px">';
+      return { html, title: c.name, color: col, sub: '命ノ星座 ・ 第' + (i + 1) + '重（C' + (i + 1) + '）',
+        badge: `<img src="assets/icon_${CH.portrait || cid}.webp" width="34" height="34" alt="">${CH.name}`,
+        lv: owned ? '✓ 解放済み' : isNext ? '次に解放' : '未解放', lvMax: owned,
+        body: I.sec('効果', c.text) + (owned ? '' : isNext ? I.sec('解放', mora + ' ' + U.fmtNum(c.cost) + ' モラ' + ((G.save.data.mora || 0) >= c.cost ? '　<b>★ いま解放できる！</b>' : ''), 'nx') : I.sec('', '先に C' + (n + 1) + ' を解放しよう')),
+        from: svg.querySelector(`.pg-node[data-i="${i}"] .ring`) };
+    }
+    function zoomCons(i) { G.inspect.open({ index: i, list: C.map((_, j) => () => consOpts(j)) }); }
     function unlock(i) {
       const n = lvl(), c = C[i]; if (i !== n) return;
       if ((G.save.data.mora || 0) < c.cost) { G.audio.sfx('denied'); return; }

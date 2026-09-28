@@ -159,8 +159,34 @@ G.skillbook = (function () {
       wrap.append(el('div', { class: 'sb-grid' }, s.keys.map(k => card(k, i++, charId))));
     }
     container.append(wrap);
+    wireInspect(wrap, secs, opts);
     seenAll();   // NEW badges stay visible in this view, gone next time
     return wrap;
+  }
+
+  /* 拡大ビューア: tap a card → big view; ←/→ through the whole book (unregistered = black silhouette + 「？？？」 only) */
+  function inspectOpts(key, secTitle, charId) {
+    const u = U(key), got = has(key);
+    if (!u) return { title: Q };
+    const I = G.inspect;
+    if (!got) return I.skill(key, { mode: 'book', locked: true, sub: u.cat === 'evo' ? '進化' : secTitle });
+    return I.skill(key, { mode: 'book', charId, sub: secTitle });
+  }
+  function wireInspect(wrap, secs, opts) {
+    if (!G.inspect) return;
+    const keys = [], meta = {};
+    for (const s of secs) {
+      const charId = s.id.indexOf('char_') === 0 ? s.id.slice(5) : opts.charId;
+      for (const k of s.keys) { keys.push(k); meta[k] = { t: s.title, charId }; }
+    }
+    wrap.querySelectorAll('.sb-card[data-key]').forEach(c => {
+      const k = c.dataset.key;
+      c.setAttribute('aria-label', (has(k) ? U(k).name : Q) + ' を大きく見る');
+      G.inspect.bindTap(c, () => G.inspect.open({
+        index: keys.indexOf(k), from: c.querySelector('.sb-ic') || c,
+        list: keys.map(key => () => { const o = inspectOpts(key, meta[key].t, meta[key].charId); o.from = wrap.querySelector('.sb-card[data-key="' + key + '"] .sb-ic'); return o; }),
+      }));
+    });
   }
 
   return { has, isNew, mark, count, total, newCount, evoLabel, evoText, evosOf, sections, allKeys, render, setAll, migrate, seenAll, Q };
