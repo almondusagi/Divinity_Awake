@@ -14,6 +14,7 @@ G.input = (function () {
     skill: ['KeyF', 'Space', 'KeyJ', 'ShiftLeft'],
     burst: ['KeyQ', 'KeyK', 'KeyR'],
     pause: ['Escape', 'KeyE', 'KeyP', 'Tab'],
+    atkToggle: ['KeyX'],          // owner 2026-09-28: stop / resume the normal attack
   };
   function actionOf(code) { for (const a in ACTIONS) if (ACTIONS[a].includes(code)) return a; return null; }
 
@@ -45,7 +46,8 @@ G.input = (function () {
       <div class="t-stick" id="tStick"><div class="t-base"></div><div class="t-dir" id="tDir"></div><div class="t-knob" id="tKnob"></div></div>
       <button class="t-btn t-skill" id="tSkill" aria-label="元素スキル"><span class="t-cd"></span><img alt="" src="assets/icon_bunny.webp"><em class="t-sec"></em><b>スキル</b></button>
       <button class="t-btn t-burst" id="tBurst" aria-label="元素爆発"><span class="t-fire" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><svg class="t-ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/></svg><span class="t-cd"></span><img alt="" src="assets/icon_rain.webp"><em class="t-sec"></em><i class="t-rdy">READY!</i><b>爆発</b></button>
-      <button class="t-btn t-pause" id="tPause" aria-label="休憩">❚❚</button>`;
+      <button class="t-btn t-pause" id="tPause" aria-label="休憩">❚❚</button>
+      <button class="t-btn t-hold" id="tHold" aria-label="通常攻撃の停止・再開"><i class="t-hold-ic" aria-hidden="true">⚔</i><b>攻撃ON</b></button>`;
     stickBase = document.getElementById('tStick'); stickKnob = document.getElementById('tKnob'); stickDir = document.getElementById('tDir');
     btnSkill = document.getElementById('tSkill'); btnBurst = document.getElementById('tBurst'); btnPause = document.getElementById('tPause');
     const zone = document.getElementById('tStickZone');
@@ -82,6 +84,9 @@ G.input = (function () {
       haptic(buzz);
     });
     tap(btnSkill, 'skill', 12); tap(btnBurst, 'burst', 18); tap(btnPause, 'pause', 8);
+    const btnHold = document.getElementById('tHold'); tap(btnHold, 'atkToggle', 10);
+    G.bus.on('atkToggle', off => { btnHold.classList.toggle('off', !!off); btnHold.querySelector('b').textContent = off ? '攻撃OFF' : '攻撃ON'; });
+    G.bus.on('runStart', () => { btnHold.classList.remove('off'); btnHold.querySelector('b').textContent = '攻撃ON'; });
     btnSkill.addEventListener('contextmenu', e => e.preventDefault()); btnBurst.addEventListener('contextmenu', e => e.preventDefault());
   }
   function updateKnob() {

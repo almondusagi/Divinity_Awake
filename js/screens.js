@@ -271,7 +271,7 @@ G.screens = (function () {
     G.setScene('title'); G.ui.clearAll(); applyBodyFlags();
     if (G.backdrop) { G.backdrop.setMode('title'); if (!opts.quick) G.backdrop.intro(); }
     const q = !!opts.quick, D = s => `--d:${q ? s * 0.3 : s}s`;
-    const text = 'ディヴィニティ・アウェイク', lines = ['ディヴィニティ', 'アウェイク'];
+    const text = 'DIVINITY AWAKE', lines = ['DIVINITY', 'AWAKE'];
     const gid = 'sw' + Math.random().toString(36).slice(2, 7);
     let ci = 0;   // letters keep flying in one after another across both lines
     const logo = el('h1', { class: 'logo', 'aria-label': text },
@@ -305,14 +305,13 @@ G.screens = (function () {
     // title mascot: Paimon flying (owner-supplied 8-frame loop, assets/paimon_flight.webp)
     const mascot = el('button', { class: 'title-amber title-paimon', type: 'button', 'aria-label': 'パイモン', 'data-nonav': '', style: D(1.45) },
       el('i', { class: 'ta-shadow' }), el('i', { class: 'ta-ring' }), el('span', { class: 'ta-body' }, el('i', { class: 'tp-sprite' })), bubble);
-    mascot.addEventListener('click', () => { sfx('star', { rarity: 4 }); hop(mascot); });
     const scr = el('div', { class: 'title-screen', 'data-nav': '' },
       el('div', { class: 'title-shade' }), G.save.data.settings.reducedFx ? null : el('div', { class: 'title-rays', 'aria-hidden': 'true' }), motes, mascot,
       el('div', { class: 'title-main' },
-        el('div', { class: 'logo-tag enter', style: D(0.2) }, 'Divinity Awake'),
+        el('div', { class: 'logo-tag enter', style: D(0.2) }, 'ディヴィニティ・アウェイク'),
         logo,
         el('div', { class: 'enter', style: D(1.0) }, sw),
-        el('p', { class: 'subtitle enter', style: D(1.05) }, '神々が目覚める。冒険の始まり。'),
+        el('p', { class: 'subtitle enter', style: D(1.05) }, '神々は、目覚めた。――この世界を、滅ぼすために。'),
         menu),
       el('div', { class: 'title-tr' }, el('div', { class: 'title-hint enter', style: D(1.8) }, el('kbd', null, '↑'), el('kbd', null, '↓'), ' 選ぶ　', el('kbd', null, 'Enter'), ' 決定'), toolsBox),
       el('div', { class: 'title-foot enter', style: D(1.7) }, '非公式ファンメイド作品　Ver ' + G.VERSION, el('br'), '原作の公式とは関係ありません'),
@@ -320,6 +319,7 @@ G.screens = (function () {
     // swap the ⏻ glyph if the font lacks it (keeps a consistent look)
     const ic = menu.lastChild.querySelector('.g-ic'); if (ic) ic.textContent = '✕';
     G.ui.show(scr);
+    paimonGame(mascot, scr);
     refreshTools(); parallax(scr);
     bgm('title');
     setTimeout(() => { if (scr.isConnected && (!document.activeElement || document.activeElement === document.body)) nav.focusDefault(scr); }, q ? 100 : 1400);
@@ -331,9 +331,94 @@ G.screens = (function () {
   function hop(m, line) {
     if (!m || !m.isConnected) return;
     const b = m.querySelector('.ta-bubble');
-    if (b) { b.textContent = line || TALK[++talkI % TALK.length]; b.classList.remove('say'); void b.offsetWidth; b.classList.add('say'); }
+    // (the base rule and .say use the same keyframes name → restart it explicitly, or the line never shows again)
+    if (b) { b.textContent = line || TALK[++talkI % TALK.length]; b.classList.remove('say'); b.style.animation = 'none'; void b.offsetWidth; b.style.animation = ''; b.classList.add('say'); }
     m.classList.remove('hop'); void m.offsetWidth; m.classList.add('hop');
     try { G.input.haptic && G.input.haptic(10); } catch (e) { }
+  }
+
+  /* ---- ui_v6: パイモンをさがせ！ — tap Paimon: poof (smoke + sparkles + sound) → she reappears at HALF the size somewhere
+     on the background (never on the logo / buttons / screen edges). Again and again; after the smallest one she comes
+     back home big: 「ただいま！」. Finds are counted (chip) and saved (G.save.data.pmFinds, owner UI); lines change as you go. */
+  const PM_STEPS = 4;   // 1 → 1/2 → 1/4 → 1/8 → (tap) home
+  const PM_FIND = ['わわっ！ 見つかっちゃった！', 'むむっ、よく見つけたな！', 'オイラ、こんなに小さくなったぞ！', 'えっへん、これでどうだ！'];
+  const PM_HOME = ['ただいま！ かくれんぼ、楽しかったぞ！', 'ただいま〜！ おまえ、目がいいな！', 'ただいま！ 次はもっとうまく隠れるぞ！', 'ただいま！ かくれんぼ名人だな！'];
+  function paimonGame(m, scr) {
+    const st = { step: 0, busy: false, round: 0 };
+    const chip = el('div', { class: 'pm-chip', 'aria-live': 'polite' }, el('i', null, '✦'), el('span', null, ''));
+    scr.append(chip);
+    const S = () => G.save.data;
+    const total = () => +S().pmFinds || 0;
+    function showChip(n, big, line) {
+      chip.querySelector('span').textContent = big ? 'かくれんぼ クリア！ これまで ' + U.fmtNum(total()) + '回 見つけた' : 'みつけた ×' + n + (line ? '　' + line : '');
+      chip.classList.remove('on', 'big'); void chip.offsetWidth; chip.classList.add('on'); if (big) chip.classList.add('big');
+    }
+    function poof(x, y, s, gold) {
+      const p = el('div', { class: 'pm-poof' + (gold ? ' gold' : ''), style: `left:${Math.round(x)}px;top:${Math.round(y)}px;--s:${Math.max(40, Math.round(s))}px`, 'aria-hidden': 'true' });
+      const few = G.save.data.settings.reducedFx;
+      for (let i = 0; i < (few ? 4 : 7); i++) { const a = i / (few ? 4 : 7) * Math.PI * 2 + R01() * 0.6; p.append(el('i', { class: 'pf-smoke', style: `--dx:${Math.cos(a).toFixed(2)};--dy:${Math.sin(a).toFixed(2)};--dl:${(R01() * 0.08).toFixed(2)}s` })); }
+      for (let i = 0; i < (few ? 5 : 12); i++) { const a = R01() * Math.PI * 2, d = 0.5 + R01() * 0.9; p.append(el('i', { class: 'pf-spark', style: `--dx:${(Math.cos(a) * d).toFixed(2)};--dy:${(Math.sin(a) * d).toFixed(2)};--dl:${(R01() * 0.12).toFixed(2)}s` })); }
+      scr.append(p); setTimeout(() => p.remove(), 1100);
+    }
+    const rect = n => n.getBoundingClientRect();
+    /** a random spot on the background: not on the logo / menu / tools / footer, not at the edges, not where she just was */
+    function spot(size, from) {
+      const W = innerWidth, H = innerHeight, mx = Math.max(24, W * 0.06), my = Math.max(20, H * 0.08), pad = Math.max(24, Math.min(W, H) * 0.06);
+      const avoid = [...scr.querySelectorAll('.title-main .logo, .title-main .logo-tag, .title-main .subtitle, .title-menu, .title-tr, .title-foot, .title-reset, .pm-chip')]
+        .map(rect).filter(r => r.width > 0).map(r => ({ l: r.left - pad, t: r.top - pad, r: r.right + pad, b: r.bottom + pad }));
+      let best = null, bs = -1e9;
+      for (let i = 0; i < 80; i++) {
+        const x = mx + R01() * Math.max(1, W - 2 * mx - size), y = my + R01() * Math.max(1, H - 2 * my - size);
+        let hit = 0;
+        for (const a of avoid) if (x < a.r && x + size > a.l && y < a.b && y + size > a.t) hit++;
+        const d = from ? Math.hypot(x + size / 2 - from.x, y + size / 2 - from.y) : W;
+        const sc = -hit * 1e5 + Math.min(d, W * 0.45) + R01() * 40;
+        if (sc > bs) { bs = sc; best = { x, y }; }
+      }
+      return best;
+    }
+    function goHome(silent) {
+      st.step = 0;
+      m.classList.remove('pm-away', 'pm-hide', 'bub-r'); m.style.left = m.style.top = m.style.width = m.style.height = m.style.right = m.style.bottom = '';
+      if (!silent) { m.classList.remove('pm-in'); void m.offsetWidth; m.classList.add('pm-in'); }
+    }
+    m.addEventListener('click', () => {
+      if (st.busy || !m.isConnected) return;
+      st.busy = true;
+      const r = rect(m), cx = r.left + r.width / 2, cy = r.top + r.height / 2, last = st.step >= PM_STEPS - 1;
+      const n = ++st.round;
+      S().pmFinds = total() + 1; try { G.save.write(); } catch (e) { }
+      sfx('magnet'); try { G.input.haptic && G.input.haptic(12); } catch (e) { }
+      poof(cx, cy, r.width, last);
+      m.classList.add('pm-hide');
+      const bb = m.querySelector('.ta-bubble'); if (bb) { bb.classList.remove('say'); bb.style.animation = 'none'; }
+      setTimeout(() => {
+        if (!m.isConnected) return;
+        if (last) {   // smallest one found → home, big, 「ただいま！」
+          goHome(); st.round = 0;
+          const home = rect(m); poof(home.left + home.width / 2, home.top + home.height / 2, home.width * 1.3, true);
+          sfx('resonance'); hop(m, PM_HOME[Math.floor(total() / PM_STEPS) % PM_HOME.length]);
+          showChip(0, true);
+        } else {
+          if (!st.base) st.base = Math.max(r.width, r.height);
+          st.step++;
+          const size = Math.max(22, Math.round(st.base / Math.pow(2, st.step)));
+          const p = spot(size, { x: cx, y: cy });
+          m.classList.add('pm-away'); m.classList.toggle('bub-r', p.x < innerWidth / 2);
+          Object.assign(m.style, { right: 'auto', bottom: 'auto', left: Math.round(p.x) + 'px', top: Math.round(p.y) + 'px', width: size + 'px', height: size + 'px' });
+          m.classList.remove('pm-hide', 'pm-in'); void m.offsetWidth; m.classList.add('pm-in');
+          sfx('comboUp', { combo: st.step * 3 });
+          // the speech bubble would give her away when she is tiny → only on the first hide; the chip carries the line
+          const line = PM_FIND[(n - 1) % PM_FIND.length];
+          if (st.step === 1) hop(m, line); else { m.classList.remove('hop'); void m.offsetWidth; m.classList.add('hop'); }
+          showChip(n, false, st.step === 1 ? '' : line);
+        }
+        setTimeout(() => { st.busy = false; }, 250);
+      }, 420);
+    });
+    // a resize would put her somewhere odd → just fly home
+    const onResize = () => { if (!m.isConnected) { removeEventListener('resize', onResize); return; } if (st.step) { goHome(true); st.round = 0; } };
+    addEventListener('resize', onResize);
   }
 
   /* ============================== HOME ============================== */
@@ -543,7 +628,7 @@ G.screens = (function () {
     const inner = el('div', { class: 'tb-in' }); body.append(inner);
     const S = G.save.data, st = S.stats;
     const ext = (fn, label) => {
-      if (typeof fn === 'function') { try { fn(inner); return; } catch (e) { console.error('[screens] panel', label, e); inner.innerHTML = ''; } }
+      if (typeof fn === 'function') { try { fn(inner, selChar); return; } catch (e) { console.error('[screens] panel', label, e); inner.innerHTML = ''; } }
       inner.append(soon('準備中', label + ' はもうすぐ登場します。'));
     };
     if (k === 'adv') {
@@ -593,7 +678,8 @@ G.screens = (function () {
   /* ---- 強化ガイド: what Mora can buy right now. Reads only data (G.data.meta / metaTree / metaCost,
      G.progression.constellations) so balance changes show up automatically. ---- */
   function metaState() {
-    const S = G.save.data, M = G.data.meta || {}, TR = G.data.metaTree, cost = G.data.metaCost, mora = S.mora || 0;
+    const S = G.save.data, P = G.progression, TR = P && P.metaTree ? P.metaTree(selChar) : G.data.metaTree, cost = G.data.metaCost, mora = S.mora || 0;
+    const M = {}; for (const k in TR.nodes) M[k] = P && P.metaDef ? P.metaDef(k, selChar) : G.data.meta[k]; // selected character's stars + names
     const out = { can: [], next: null };
     if (!TR || !TR.nodes || typeof cost !== 'function') return out;
     const lv = k => (k === 'root' ? 1 : ((S.meta && S.meta[k]) | 0));
@@ -610,7 +696,7 @@ G.screens = (function () {
   }
   function consState() {
     const P = G.progression; if (!P || !P.constellations || typeof P.constellationLevel !== 'function') return null;
-    const i = P.constellationLevel(), c = P.constellations[i]; if (!c) return null;
+    const i = P.constellationLevel(selChar), c = (P.constellationsOf ? P.constellationsOf(selChar) : P.constellations)[i]; if (!c) return null;
     return { i, c, cost: c.cost, can: (G.save.data.mora || 0) >= c.cost };
   }
   function metaFxText(d, lv) {
@@ -636,7 +722,7 @@ G.screens = (function () {
       const { d, lv } = target.m; col = target.m.col; o = orb(d, col); nm = [d.name, el('span', { class: 'gd-lv' }, `Lv.${lv}`, el('i', null, '→'), el('b', null, `Lv.${lv + 1}`))];
       fxLine = (d.max === 1 || d.keystone) ? (d.desc || '') : metaFxText(d, lv) + ' → ' + metaFxText(d, lv + 1).replace(d.name + ' ', '');
     } else {
-      col = '#ffe07a'; o = el('i', { class: 'gd-orb', style: `--c:${col}` }, el('img', { src: icon('amber'), alt: '' }));
+      col = '#ffe07a'; o = el('i', { class: 'gd-orb', style: `--c:${col}` }, el('img', { src: icon((G.data.characters[selChar] || {}).portrait || selChar), alt: '' }));
       nm = ['命ノ星座 C' + (target.c.i + 1), el('span', { class: 'gd-lv' }, target.c.c.name || '')]; fxLine = target.c.c.short || target.c.c.text || '';
     }
     const pct = Math.max(0, Math.min(100, Math.round(mora / Math.max(1, cost) * 100)));
@@ -809,7 +895,7 @@ G.screens = (function () {
     const keys = buildList(R);
     const build = keys.length ? el('div', { class: 'build' }, keys.map(k => {
       const up = G.upgrades[k], lv = R.levels[k], evo = up.cat === 'evo' || R.evolved[k], bless = up.cat === 'bless';
-      return el('div', { class: 'b-item' + (evo ? ' evo' : '') + (bless ? ' evo bless' : ''), style: `--rc:${RC[up.rarity] || '#d3bc8e'}` },
+      return el('div', { class: 'b-item' + (evo ? ' evo' : '') + (bless ? ' evo bless' : ''), 'data-key': k, style: `--rc:${RC[up.rarity] || '#d3bc8e'}` },
         el('div', { class: 'bi' }, up.icon ? el('img', { src: icon(up.icon), alt: '' }) : el('b', null, up.glyph || '✦')),
         el('div', { class: 'b-nm' }, el('b', null, up.name), bless ? el('small', { style: 'color:#ffe7a8' }, '★5 天啓') : evo ? el('small', { style: 'color:#ffe7a8' }, '進化済み') : pips(lv, up.max || 1)));
     })) : el('div', { class: 'b-empty' }, 'まだ強化はありません。');
@@ -825,7 +911,7 @@ G.screens = (function () {
     let close;
     const resume = () => { close(); G.game.resume('menu'); sfx('ui'); };
     const chip = (img, text) => el('span', { class: 'chip' }, img ? el('img', { src: icon(img), alt: '' }) : null, text);
-    close = openModal(panel('pause-panel',
+    const pp = panel('pause-panel',
       el('div', { class: 'pause-top' }, el('h2', null, '休憩中'),
         chip(null, '⏱ ' + U.fmtTime(R.time)), chip(null, 'Lv.' + p.level), chip('hilichurl', U.fmtNum(R.kills)), chip('mora', U.fmtNum(Math.floor(R.mora)))),
       el('div', { class: 'g-divider' }),
@@ -836,7 +922,96 @@ G.screens = (function () {
         btn('再開', { icon: '▶', ic: 'ok', auto: true, back: true, sfx: false, on: resume }),
         btn('スキルブック', { icon: '✦', cls: 'pz-book', on: () => skillBook(R.charId) }),
         btn('設定', { icon: '⚙', on: () => settings('pause') }),
-        btn('モラを持って帰還', { icon: '⌂', on: () => retreat(close) }))));
+        btn('モラを持って帰還', { icon: '⌂', on: () => retreat(close) })));
+    wireSkillIcons(R, pp);
+    close = openModal(pp);
+  }
+  /* ---- ui_v6: 一時停止メニューのスキル説明 — tap a skill icon → name, Lv/MAX, now / next-Lv effect and the evolution hint
+     (same 「？？？」 rule as the スキルブック). Tap the same icon again / outside / Esc closes it. */
+  let spop = null;
+  const CATN = { char: '専用スキル', launcher: 'ランチャー', stat: 'ステータス', bless: '★5 天啓', evo: '進化スキル' };
+  function closeSkillPop(silent) {
+    if (!spop) return; const p = spop; spop = null;
+    removeEventListener('keydown', p.onKey, true); removeEventListener('pointerdown', p.onDown, true); cancelAnimationFrame(p.raf);
+    if (p.src) { p.src.classList.remove('sk-on'); p.src.setAttribute('aria-expanded', 'false'); }
+    p.node.classList.add('out'); setTimeout(() => p.node.remove(), 160);
+    if (!silent) sfx('uiHover');
+  }
+  function skillPopBody(R, key, evoKey) {
+    const up = G.upgrades[key] || {}, max = up.max || 1, lv = Math.min(max, R.levels[key] || 0), isEvo = up.cat === 'evo', bless = up.cat === 'bless';
+    const html = s => el('div', { class: 'sk-fx', html: String(s || '').replace(/\n/g, '<br>') });
+    const artH = k => { try { const PU = G.progressionUI; PU.ensureCss && PU.ensureCss(); return PU.art(k); } catch (e) { return ''; } };
+    const who = up.cat === 'char' && up.char && G.data.characters[up.char] ? G.data.characters[up.char].name + '専用' : CATN[up.cat] || '';
+    const lvTxt = isEvo ? '進化済み' : bless ? '★5' : lv >= max ? 'Lv.' + lv + ' MAX' : 'Lv.' + lv + ' / MAX ' + max;
+    const box = el('div', { class: 'sk-in' },
+      el('div', { class: 'sk-hd' }, el('span', { class: 'sk-ic', html: artH(evoKey || key) }),
+        el('div', { class: 'sk-tt' }, el('small', null, who), el('b', null, up.name || key)),
+        el('span', { class: 'sk-lv' + (lv >= max || isEvo || bless ? ' max' : '') }, lvTxt)));
+    if (!isEvo && !bless && max > 1) box.append(el('div', { class: 'sk-pips' }, Array.from({ length: max }, (_, i) => el('i', { class: i < lv ? 'on' : '' }))));
+    box.append(el('div', { class: 'sk-sec' }, el('h5', null, 'いまの効果'), html(up.desc ? up.desc(Math.max(1, lv)) : up.short)));
+    if (!isEvo && !bless) {
+      if (lv < max) box.append(el('div', { class: 'sk-sec nx' }, el('h5', null, '次のLv.' + (lv + 1)), html(up.desc ? up.desc(lv + 1) : '')));
+      else box.append(el('div', { class: 'sk-sec mx' }, el('h5', null, 'MAX！'), el('div', { class: 'sk-fx' }, 'これ以上は強くならないよ')));
+    }
+    if (evoKey && G.upgrades[evoKey]) {
+      const eu = G.upgrades[evoKey];
+      box.append(el('div', { class: 'sk-sec ev' }, el('h5', null, '★ 進化済み「' + eu.name + '」'), html(eu.desc ? eu.desc(1) : eu.short)));
+    } else if (!isEvo && !bless && G.skillbook) {
+      const evs = G.skillbook.evosOf(key, R.charId).filter(e => !R.evolved[e.key]);
+      if (evs.length) box.append(el('div', { class: 'sk-evos' }, evs.map(e => el('div', { class: 'sk-evo' + (G.skillbook.has(e.key) ? ' known' : '') }, el('i', null, '✦'), G.skillbook.evoText(e.key)))));
+    }
+    return box;
+  }
+  function openSkillPop(R, src, key, evoKey) {
+    if (!R || !G.upgrades[key]) return;
+    if (spop && spop.src === src) { closeSkillPop(); return; }
+    closeSkillPop(true);
+    sfx('ui');
+    const node = el('div', { class: 'sk-pop', role: 'dialog', 'aria-label': (G.upgrades[key].name || '') + ' の説明' },
+      el('button', { class: 'sk-x', type: 'button', 'aria-label': '閉じる', onclick: () => closeSkillPop() }, '✕'), skillPopBody(R, key, evoKey));
+    document.body.append(node);
+    src.classList.add('sk-on'); src.setAttribute('aria-expanded', 'true');
+    // place next to the icon (below, else above), clamped to the screen; phones: whichever side has more room
+    const r = src.getBoundingClientRect(), W = innerWidth, H = innerHeight, m = 8;
+    const w = node.offsetWidth, h = node.offsetHeight;
+    let x = r.left + r.width / 2 - w / 2, y = r.bottom + 10, below = true;
+    if (y + h > H - m && r.top - 10 - h >= m) { y = r.top - 10 - h; below = false; }
+    else if (y + h > H - m) {   // no room above/below → beside the icon
+      y = Math.max(m, Math.min(H - m - h, r.top + r.height / 2 - h / 2));
+      x = r.right + 10 + w <= W - m ? r.right + 10 : r.left - 10 - w;
+    }
+    x = Math.max(m, Math.min(W - m - w, x)); y = Math.max(m, y);
+    node.style.left = Math.round(x) + 'px'; node.style.top = Math.round(y) + 'px';
+    node.style.setProperty('--ax', Math.round(U.clamp(r.left + r.width / 2 - x, 16, w - 16)) + 'px');
+    node.classList.add(below ? 'below' : 'above');
+    let swallow = 0;
+    const onKey = e => { if (e.code === 'Escape' || e.key === 'Escape' || e.code === 'Backspace') { e.preventDefault(); e.stopPropagation(); closeSkillPop(); } };
+    const onDown = e => {
+      const t = e.target;
+      if (node.contains(t)) return;
+      const hit = t && t.closest && t.closest('[data-key]');
+      if (hit && hit === src) return;               // same icon → the click toggles it closed
+      closeSkillPop();
+      if (!hit) swallow = performance.now();       // tapping outside only closes (no accidental 再開 etc.)
+    };
+    const onClick = e => { if (swallow && performance.now() - swallow < 600) { e.preventDefault(); e.stopPropagation(); } swallow = 0; removeEventListener('click', onClick, true); };
+    addEventListener('click', onClick, true);
+    addEventListener('keydown', onKey, true); addEventListener('pointerdown', onDown, true);
+    // closes itself when the pause menu goes away (resume / 帰還 / scene change)
+    const host = src.closest('.ui-modal');
+    const watch = () => { if (!spop || spop.node !== node) return; if (!src.isConnected || (host && host.classList.contains('closing'))) { closeSkillPop(true); return; } spop.raf = requestAnimationFrame(watch); };
+    spop = { node, src, onKey, onDown, raf: requestAnimationFrame(watch) };
+  }
+  /** makes every skill icon of the pause menu (renderBuild .pg-bi / fallback .b-item) a tappable button */
+  function wireSkillIcons(R, root) {
+    root.querySelectorAll('.pg-bi[data-key], .b-item[data-key]').forEach(n => {
+      n.setAttribute('role', 'button'); n.tabIndex = 0; n.setAttribute('aria-expanded', 'false');
+      n.classList.add('sk-tap');
+      n.setAttribute('aria-label', ((G.upgrades[n.dataset.key] || {}).name || '') + ' の説明');
+      n.removeAttribute('title');
+      n.addEventListener('click', e => { e.stopPropagation(); openSkillPop(R, n, n.dataset.key, n.dataset.evo); });
+      n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openSkillPop(R, n, n.dataset.key, n.dataset.evo); } });
+    });
   }
   /** スキルブック as a modal (pause menu: the run stays paused; 閉じる / Esc returns to the pause menu) */
   function skillBook(charId) {
@@ -853,7 +1028,7 @@ G.screens = (function () {
     const fn = G.progressionUI && G.progressionUI.renderBuild;
     if (typeof fn === 'function') {
       const box = el('div', { class: 'pb-ext' });
-      try { fn(box, R); if (box.childNodes.length) { col.append(box); return col; } } catch (e) { console.error('[screens] renderBuild', e); }
+      try { fn(box, R); if (box.childNodes.length) { const ph = box.querySelector('.pg-ph'); if (ph && box.querySelector('.pg-bi[data-key]')) ph.append(el('span', { class: 'sk-tip' }, G.input && G.input.touchMode ? 'アイコンをタップで説明' : 'アイコンを押すと説明')); col.append(box); return col; } } catch (e) { console.error('[screens] renderBuild', e); }
     }
     col.append(el('h4', null, 'いまのビルド'), fallback);
     return col;

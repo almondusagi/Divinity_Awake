@@ -9,9 +9,9 @@ G.data.characters = {
   amber: {
     id: 'amber', name: 'アンバー', title: '偵察騎士', element: 'pyro', weapon: '弓', atlas: 'amber', portrait: 'amber',
     implemented: true,
-    hp: 1000, atk: 100, def: 0, speed: 4.1, pickup: 2.2,
+    hp: 1000, atk: 100, def: 0, speed: 4.1, pickup: 1.2,
     // un-upgraded normal attack is deliberately clumsy (slow bow, short auto-aim); home upgrades fix it (balance v5)
-    atkInterval: 1.2, range: 8.5, chargedPeriod: 6.0,
+    atkInterval: 2.4, range: 8.5, chargedPeriod: 6.0,   // owner 2026-09-28: ×2 (was 1.2)
     energyCost: 40, skillCd: 18, burstCd: 12,
     skillName: 'ウサギ伯爵', burstName: '矢の雨', normalName: '炎の矢',
     passive: '爆発範囲 常時×2（固有天賦）',
@@ -20,7 +20,7 @@ G.data.characters = {
   xingqiu: {
     id: 'xingqiu', name: '行秋', title: '古華派の剣士', element: 'hydro', weapon: '片手剣', atlas: 'xingqiu', portrait: 'xingqiu',
     implemented: true, // 4-direction sheet: assets/actor_xingqiu.webp (owner pack)
-    hp: 1150, atk: 100, def: 10, speed: 4.2, pickup: 2.2,
+    hp: 1150, atk: 100, def: 10, speed: 4.2, pickup: 1.2,
     // melee: swords orbit around him. atkInterval = rest time between spins (long at first; 雷鳥の羽 shortens it)
     atkInterval: 2.4, range: 8.5,
     energyCost: 50, skillCd: 14, burstCd: 15,
@@ -39,7 +39,7 @@ G.data.characters = {
     id: 'ningguang', name: '凝光', title: '天権星', element: 'geo', weapon: '法器', portrait: 'ningguang', atlas: 'ningguang',
     implemented: true, // kit: js/ningguang.js (owner: NINGGUANG)
     unlock: { stage: 'mondstadt', mora: 50000 }, // UI: G.unlocks (silhouette until the stage is cleared, then buy)
-    hp: 950, atk: 100, def: 5, speed: 4.0, pickup: 2.2,
+    hp: 950, atk: 100, def: 5, speed: 4.0, pickup: 1.2,
     // normal: a volley of homing gold pebbles (7 at first, 25% ATK each = 1/4 of Amber's lv0 arrow) every atkInterval s
     atkInterval: 1.1, range: 9,
     energyCost: 40, skillCd: 12, burstCd: 12,
@@ -58,7 +58,7 @@ G.data.characters = {
     id: 'chongyun', name: '重雲', title: '方士の少年', element: 'cryo', weapon: '両手剣', portrait: 'chongyun', atlas: 'chongyun',
     implemented: true, // kit: js/chongyun.js (owner: CHONGYUN)
     unlock: { stage: 'mondstadt', mora: 50000 }, // UI: G.unlocks (silhouette until the stage is cleared, then buy)
-    hp: 1150, atk: 100, def: 15, speed: 3.95, pickup: 2.2,
+    hp: 1150, atk: 100, def: 15, speed: 3.95, pickup: 1.2,
     // melee: heavy greatsword sweeps. atkInterval = rest between swing chains (slow at first; 攻撃速度・霜の領域 shorten it)
     atkInterval: 1.7, range: 8.5,
     energyCost: 40, skillCd: 15, burstCd: 12,
@@ -337,6 +337,76 @@ G.data.metaTree = {
     gather: { x: 250, y: 192, parent: 'root', br: 'gold' }, mora: { x: 288, y: 238, parent: 'gather', br: 'gold' },
     chest: { x: 338, y: 260, parent: 'mora', br: 'gold' }, ks_luck: { x: 372, y: 212, parent: 'chest', br: 'gold' },
     reroll: { x: 214, y: 262, parent: 'gather', br: 'gold' },
+  },
+};
+/* キャラ専用の星 (owner: PROGRESSION): every character owns one extra branch at the top of the star map. These stars live in
+   G.save.data.meta like the shared ones (keys sp_<char>_*), are shown only while that character is selected and only work
+   for that character (G.progression.computeStats). Shared stars (攻撃力・矢の本数・射程 …) keep working for everyone;
+   metaText renames them per character (矢の本数 → 剣の本数 …). */
+G.data.metaChar = {
+  amber:     { name: '矢の星', c: '#ff7a3d' },
+  xingqiu:   { name: '剣の星', c: '#4fb4ff' },
+  ningguang: { name: '石粒の星', c: '#ffcf4a' },
+  chongyun:  { name: '大剣の星', c: '#9ff0ff' },
+};
+(function () {
+  const M = G.data.meta;
+  // same shape for every character: 通常攻撃 → (スキル / 爆発) → 要の星
+  const POS = { n: [200, 106, 'root'], s: [162, 62, 'n'], q: [238, 62, 'n'], k: [200, 30, 's'] };
+  const STAR = (id, o) => Object.assign({ max: 5, pct: true, base: 120, growth: 1.45, char: id }, o);
+  const KS = (id, o) => Object.assign({ max: 1, per: 1, base: 1800, keystone: true, char: id }, o);
+  const defs = {
+    amber: {
+      n: STAR('amber', { name: '炎の矢の威力', glyph: 'arrows', desc: '炎の矢のダメージ +8%', per: 0.08 }),
+      s: STAR('amber', { name: '伯爵の火薬', glyph: 'boom', desc: 'ウサギ伯爵のダメージ +10%', per: 0.10 }),
+      q: STAR('amber', { name: '矢の雨の威力', glyph: 'rain', desc: '矢の雨のダメージ +10%', per: 0.10 }),
+      k: KS('amber', { name: '百発百中', glyph: 'eye', desc: '狙い撃ちが 25% 速くなる' }),
+    },
+    xingqiu: {
+      n: STAR('xingqiu', { name: '剣の威力', glyph: 'blade', desc: '回る剣のダメージ +8%', per: 0.08 }),
+      s: STAR('xingqiu', { name: '画雨籠山の威力', glyph: 'shield', desc: '元素スキルのダメージ +10%', per: 0.10 }),
+      q: STAR('xingqiu', { name: '裁雨留虹の威力', glyph: 'rain', desc: '元素爆発のダメージ +10%', per: 0.10 }),
+      k: KS('xingqiu', { name: '流水の心', glyph: 'haste', desc: '剣の休み時間 -15%（すぐ また回る）' }),
+    },
+    ningguang: {
+      n: STAR('ningguang', { name: '石粒の威力', glyph: 'gem', desc: '石粒のダメージ +8%', per: 0.08 }),
+      s: STAR('ningguang', { name: '璇璣屏の威力', glyph: 'def', desc: '元素スキルのダメージ +10%', per: 0.10 }),
+      q: STAR('ningguang', { name: '天権崩玉の威力', glyph: 'cd', desc: '元素爆発のダメージ +10%', per: 0.10 }),
+      k: KS('ningguang', { name: '宝石の輝き', glyph: 'gem', desc: '一度に飛ばす石粒 +3粒' }),
+    },
+    chongyun: {
+      n: STAR('chongyun', { name: '大剣の威力', glyph: 'gsword', desc: '薙ぎ払いのダメージ +8%', per: 0.08 }),
+      s: STAR('chongyun', { name: '重華積霜の威力', glyph: 'snow', desc: '元素スキルのダメージ +10%', per: 0.10 }),
+      q: STAR('chongyun', { name: '雲開星落の威力', glyph: 'cd', desc: '元素爆発のダメージ +10%', per: 0.10 }),
+      k: KS('chongyun', { name: '剛の剣', glyph: 'eye', desc: '大剣がとどく距離 +15%' }),
+    },
+  };
+  for (const id in defs) {
+    const nodes = {};
+    for (const s in defs[id]) {
+      const key = 'sp_' + id + '_' + s, p = POS[s];
+      M[key] = defs[id][s];
+      nodes[key] = { x: p[0], y: p[1], parent: p[2] === 'root' ? 'root' : 'sp_' + id + '_' + p[2], br: 'char' };
+    }
+    G.data.metaChar[id].nodes = nodes;
+  }
+})();
+/* per-character names / texts for the SHARED stars (the effect is the same key; each kit reads it its own way) */
+G.data.metaText = {
+  xingqiu: {
+    multishot: { name: '剣の本数', desc: '回る剣 +1本' },
+    haste: { desc: '剣もランチャーも速く +8%' },
+    range: { desc: '剣の輪が大きくなる +10%（最大+40%）' },
+  },
+  ningguang: {
+    multishot: { name: '石粒の数', desc: '一度に飛ばす石粒 +2粒' },
+    haste: { desc: '石粒もランチャーも速く +8%' },
+    range: { desc: '石粒がねらう距離 +10%（遠くの敵もねらう）' },
+  },
+  chongyun: {
+    multishot: { name: '連撃の数', desc: '1回に振る数 +1（最大6連撃）' },
+    haste: { desc: '大剣もランチャーも速く +8%' },
+    range: { desc: '大剣がとどく距離 +10%（最大+40%）' },
   },
 };
 G.data.metaCost = function (key, level) {

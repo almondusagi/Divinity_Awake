@@ -75,6 +75,11 @@ G.player = (function () {
     // actions
     if (G.input.consume('skill')) G.weapons.trySkill(R);
     if (G.input.consume('burst')) G.weapons.tryBurst(R);
+    if (G.input.consume('atkToggle')) {
+      R.atkOff = !R.atkOff; G.bus.emit('atkToggle', R.atkOff);
+      G.bus.emit('notice', { text: R.atkOff ? '通常攻撃 停止' : '通常攻撃 再開', color: R.atkOff ? '#ff9d8a' : '#9ffff0' });
+      G.audio.sfx(R.atkOff ? 'denied' : 'ui');
+    }
   }
 
   /** play a locked pose (attack/skill/burst) facing a direction */

@@ -176,8 +176,24 @@ G.hud = (function () {
 
     /* ===== XP bar ===== */
     const xpF = p.xpNeed > 0 ? U.clamp(p.xp / p.xpNeed, 0, 1) : 0;
-    if (p.level !== st.lvl) { if (st.lvl && p.level > st.lvl) { st.lvPop = 1; st.xp = 0; } st.lvl = p.level; st.lvTxt = 'Lv.' + p.level; }
-    st.xp += (xpF - st.xp) * Math.min(1, rdt * 10);
+    // owner 2026-09-28: the bar must reach the right edge exactly when the level goes up.
+    // On level-up we first finish filling to 100%, then restart from 0 and track the real value closely.
+    if (p.level !== st.lvl) {
+      if (st.lvl && p.level > st.lvl) st.toFull = true; else { st.lvl = p.level; st.lvTxt = 'Lv.' + p.level; }
+    }
+    if (st.toFull) {
+      st.xp += (1 - st.xp) * Math.min(1, rdt * 30) + rdt * 0.5;
+      if (st.xp >= 0.995) { st.xp = 0; st.toFull = false; st.lvPop = 1; st.lvl = p.level; st.lvTxt = 'Lv.' + p.level; }
+    } else st.xp += (xpF - st.xp) * Math.min(1, rdt * 20);
+    if (st.xp > 1) st.xp = 1;
+    if (R.atkOff) { // normal attack stopped → small persistent badge under the XP bar
+      const tx = V.w / 2, ty = safe.t + L.xpH + Math.round(64 * k);
+      ctx.save(); ctx.font = `900 ${Math.round(13 * k)}px "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const lab = G.input.touchMode ? '通常攻撃 停止中' : '通常攻撃 停止中（Xで再開）', w = ctx.measureText(lab).width + 24 * k, h = 22 * k;
+      ctx.globalAlpha = A * (0.75 + 0.25 * Math.sin(now * 4)); ctx.fillStyle = 'rgba(60,16,20,.85)'; ctx.fillRect(tx - w / 2, ty - h / 2, w, h);
+      ctx.strokeStyle = '#ff9d8a'; ctx.lineWidth = 1.5; ctx.strokeRect(tx - w / 2, ty - h / 2, w, h);
+      ctx.globalAlpha = A; ctx.fillStyle = '#ffd9d0'; ctx.fillText(lab, tx, ty + 1); ctx.restore();
+    }
     const xh = L.xpH, xw = V.w;
     ctx.fillStyle = 'rgba(6,12,24,.78)'; ctx.fillRect(0, 0, xw, xh + safe.t);
     const fw = xw * st.xp;
@@ -264,7 +280,10 @@ G.hud = (function () {
           rr(ctx, x, y, s, s, 6 * k); ctx.fillStyle = evo ? 'rgba(90,58,20,.9)' : 'rgba(16,26,44,.82)'; ctx.fill();
           ctx.lineWidth = evo ? 1.6 : 1; ctx.strokeStyle = evo ? '#ffe7a8' : 'rgba(211,188,142,.55)'; ctx.stroke();
         }
-        if (up.hudIcon || up.icon) drawIcon(ctx, up.hudIcon || up.icon, x + s / 2, y + s / 2, s * 0.8);
+        // just-picked slot (level-up card flew here): short white pulse + bounce
+        const pk = key === st.popKey ? Math.max(0, 1 - (now - st.popT) / 0.45) : 0;
+        if (pk > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = A * pk; const gs = s * (1.6 + (1 - pk)); ctx.drawImage(glow('#fff4c4', 64), x + s / 2 - gs / 2, y + s / 2 - gs / 2, gs, gs); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = A; }
+        if (up.hudIcon || up.icon) drawIcon(ctx, up.hudIcon || up.icon, x + s / 2, y + s / 2, s * 0.8 * (1 + 0.35 * pk));
         const lv = R.levels[key] || 0, mx = up.max || 1;
         if (bless) text(ctx, '★', x + s - 1, y + 9 * k, F.tiny, '#fff4c4', 'right', 'rgba(90,50,0,.9)', 2.5);
         else if (!evo) {
@@ -576,9 +595,24 @@ G.hud = (function () {
     } catch (e) { }
   }
   G.hudIconUrl = iconUrl;
+  /** screen rect (CSS px) of the owned-skill slot for `key` (the next free slot when not owned yet) — the level-up
+      card's icon flies there. Mirrors the wrap logic of the owned row in draw(). */
+  function slotRect(key) {
+    if (lw < 0 || !L.iconS) return null;
+    const up = G.upgrades[key], cat = up && up.cat;
+    // stats / heal / mora are not in the owned row → the portrait
+    if (cat !== 'bless' && cat !== 'evo' && cat !== 'char' && cat !== 'launcher') return { x: L.px, y: L.py, w: L.pr * 2, h: L.pr * 2 };
+    const s = L.iconS, gap = Math.round(5 * k), maxX = Math.max(L.barX + L.barW, L.px + 6 * (s + gap));
+    let i = st.owned.indexOf(key); if (i < 0) i = st.owned.length;
+    let x = L.px, y = L.iconY;
+    for (let j = 0; j < i; j++) { x += s + gap; if (x + s > maxX) { x = L.px; y += s + gap + 4; } }
+    if (x + s > maxX) { x = L.px; y += s + gap + 4; }
+    return { x, y, w: s, h: s };
+  }
+  function pop(key) { st.popKey = key; st.popT = performance.now() / 1000; }
   G.bus.on('scene', s => { if (s !== 'run') layer.innerHTML = ''; });
   G.bus.on('runEnd', () => setTimeout(() => { layer.querySelectorAll('.bn-note,.bn-stage,.bn-warn,.warn-vig').forEach(n => n.remove()); }, 400));
   addEventListener('resize', () => { lw = -1; });
 
-  return { draw, layer };
+  return { draw, layer, slotRect, pop };
 })();

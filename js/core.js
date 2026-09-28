@@ -103,7 +103,7 @@ G.save = (function () {
       stats: { runs: 0, clears: 0, kills: 0, bestTime: 0, bestKills: 0, totalMora: 0 },
       cleared: {},         // stage id -> true (final boss beaten; owner: STAGE)
       settings: {
-        sfx: true, bgm: true, sfxVolume: 0.8, bgmVolume: 0.6,
+        sfx: true, bgm: true, sfxVolume: 0.15, bgmVolume: 0.15,
         reducedFx: false, screenShake: 1, damageNumbers: true, showFps: false,
         touchControls: 'auto',  // auto | on | off
       },
@@ -123,6 +123,9 @@ G.save = (function () {
     load() {
       try { const raw = localStorage.getItem(KEY); if (raw) data = deepMerge(defaults(), JSON.parse(raw)); }
       catch (e) { console.warn('save load failed', e); data = defaults(); }
+      // owner 2026-09-28: default volumes are now 15 — move saves still on the old defaults (80 / 60)
+      try { const st = data.settings; if (st && !data.vol15) { if (st.sfxVolume === 0.8) st.sfxVolume = 0.15; if (st.bgmVolume === 0.6) st.bgmVolume = 0.15; data.vol15 = true; } }
+      catch (e) { }
       return data;
     },
     write() { try { localStorage.setItem(KEY, JSON.stringify(data)); return true; } catch (e) { return false; } },
@@ -159,6 +162,8 @@ G.assets = (function () {
     ['skillfx_xingqiu', 'assets/skillfx_xingqiu.webp'], ['skillfx_ningguang', 'assets/skillfx_ningguang.webp'], ['skillfx_chongyun', 'assets/skillfx_chongyun.webp'],
     ['paimon_flight', 'assets/paimon_flight.webp'],
     ['title_bg', 'assets/title_bg.webp'], ['floor', 'assets/floor.webp']);
+  // ability icons (owner: ICON, tools/draw_ability_icons.py): icon_ab_<upgrade key>.webp — HUD owned-skill slots draw these
+  ['ab_amber_arrows', 'ab_amber_burst', 'ab_amber_normal', 'ab_amber_pierce', 'ab_amber_skill', 'ab_attack', 'ab_bless_dandelion', 'ab_bless_favonius', 'ab_bless_firework', 'ab_bless_meteor', 'ab_bless_mora', 'ab_bless_scout', 'ab_crit_damage', 'ab_crit_rate', 'ab_cy_arc', 'ab_cy_burst', 'ab_cy_combo', 'ab_cy_power', 'ab_cy_skill', 'ab_defense', 'ab_evo_amber_burst', 'ab_evo_amber_normal', 'ab_evo_amber_skill', 'ab_evo_cy_normal', 'ab_evo_launcher_anemo', 'ab_evo_launcher_cryo', 'ab_evo_launcher_electro', 'ab_evo_launcher_geo', 'ab_evo_launcher_hydro', 'ab_evo_launcher_pyro', 'ab_evo_ng_normal', 'ab_evo_xq_normal', 'ab_explosion_radius', 'ab_harvest', 'ab_haste', 'ab_hp', 'ab_ng_burst', 'ab_ng_gems', 'ab_ng_power', 'ab_ng_skill', 'ab_recharge', 'ab_shield_damage', 'ab_shield_hp', 'ab_shield_range', 'ab_speed', 'ab_xq_blades', 'ab_xq_burst', 'ab_xq_power', 'ab_xq_skill', 'ab_xq_spin'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
   // v5 stages (owner: STAGE): boss icons, stage floors, stage landscapes (UI stage select / intro)
   ['zhongli', 'raiden', 'nahida'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
   ['fx_meteor', 'fx_rock_pillar', 'fx_lightning_slash', 'fx_dendro_burst', 'fx_dream_pattern'].forEach(n => list.push([n, 'assets/' + n + '.webp']));

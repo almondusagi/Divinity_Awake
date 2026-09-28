@@ -228,7 +228,7 @@
     spr();
     const t = R.time, fade = Math.min(1, (Ws.xqRainUntil - R.time) / 0.6, (R.time - Ws.xqRainT0) / 0.25);
     for (let i = 0; i < n; i++) {
-      const a = t * 2.2 + i * TAU / 3, s = Math.sin(a);
+      const a = t * 2.2 + i * TAU / Math.max(3, n), s = Math.sin(a);
       if ((s >= 0) !== o.front) continue;
       const x = p.x + Math.cos(a) * 0.95, y = p.y - 1.05 + s * 0.35 + Math.sin(t * 4 + i) * 0.06;
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5 * fade; ctx.drawImage(glow(HY, 32), x - 0.35, y - 0.6, 0.7, 1.2);
@@ -257,7 +257,7 @@
     if (ev && W.evoFirst(R, 'evo_xq_normal')) { const p = R.player; W.evoFanfare(R, p.x, p.y, HY, 6, 'evo_xq_normal'); if (!Ws.xqPhase) startSpin(R, Ws); fireWaves(R, Ws); }
     if (!Ws.xqPhase) {
       Ws.xqT += dt; Ws.xqRest = restTime(R);
-      if (ev || Ws.xqT >= Ws.xqRest) startSpin(R, Ws);
+      if ((ev || Ws.xqT >= Ws.xqRest) && !R.atkOff) startSpin(R, Ws);
       return;
     }
     Ws.xqT += dt; Ws.xqIn += dt;
@@ -277,7 +277,8 @@
   /* ============================ SKILL: 古華剣・画雨籠山 ============================ */
   const SKILL_CD = 14;
   function skillCdBase(R) { return SKILL_CD * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
-  function skillMul(R) { return st(R, 'xqSkillMul', 2.6); }
+  // C4 (constellation, R.stats.xqC4): while 裁雨留虹 is raining the skill hits harder
+  function skillMul(R) { return st(R, 'xqSkillMul', 2.6) * (R.stats.xqC4 && R.time < (R.wstate.xqBurstUntil || 0) ? R.stats.xqC4 : 1); }
 
   function slashDraw(ctx, f) {
     const k = f.t / f.life, s = f.r * (0.75 + 0.35 * U.ease.outCubic(k));
@@ -317,7 +318,7 @@
     const n = slash(R, 0);
     W.field(R, { x: 0, y: 0, life: 0.2, ground: true, onEnd: R2 => { const m = slash(R2, 1); if (n + m > 0) spawnParticles(R2, R2.player.x + R2.player.face.x * 2, R2.player.y + R2.player.face.y * 2, 3, 2.5); } });
     // 雨すだれの剣
-    Ws.xqRainN = 3; Ws.xqRainT0 = R.time; Ws.xqRainUntil = R.time + 15 * (S.durationMul || 1);
+    Ws.xqRainN = st(R, 'xqRainN', 3); Ws.xqRainT0 = R.time; Ws.xqRainUntil = R.time + 15 * (S.durationMul || 1);
     G.fx.reactionText && G.fx.reactionText(p.x, p.y - 2.6, '雨すだれの剣！', HYL);
     G.bus.emit('shield', 'hydro');
   }
@@ -394,13 +395,15 @@
     G.fx.rays && G.fx.rays(p.x, p.y - 1, 5, '#cfeeff', 1);
     G.bus.emit('notice', { text: '五月雨斬り！', color: HYL });
     const mul = burstMul(R) * (1 + (S.burstBonus || 0));
+    R.wstate.xqBurstUntil = R.time + life;           // constellation C4 reads this
     let tick = 0;
     // ground cone (shows where the swords fall) + the barrage logic
     W.field(R, { x: p.x, y: p.y, r: 9.5, life, tick: 0.18, next: 0.25, ground: true,
       update(R2, dt, f) { const q = R2.player; f.x = q.x; f.y = q.y; f.ang = Math.atan2(q.face.y, q.face.x); },
       onTick(R2, f) {
         const q = R2.player, fx = q.face.x, fy = q.face.y;
-        const n = (reduced() ? 2 : PATTERN[tick % 3]) + (L >> 1); tick++;
+        const n = (reduced() ? 2 : PATTERN[tick % 3]) + (L >> 1) + (R2.stats.xqBurstExtra || 0); tick++;
+        if (R2.stats.xqBurstEnergy && tick % 9 === 0) G.player.addEnergy(R2, R2.stats.xqBurstEnergy); // C6
         cone.length = 0; cQ.x = q.x; cQ.y = q.y; cQ.fx = fx; cQ.fy = fy; cQ.len = f.r; cQ.cos = Math.cos(0.6);
         R2.grid.query(q.x, q.y, f.r, coneCollect);
         for (let i = 0; i < n; i++) {

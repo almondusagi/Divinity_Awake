@@ -453,10 +453,10 @@
       // normal attack
       Ws.arrowT = (Ws.arrowT || 0) - dt;
       if (Ws.arrowT <= 0) {
-        if (fireArrows(R)) Ws.arrowT = (S.normalInterval || 0.78) * (S.featherCd || 1) / (Math.max(0.2, S.haste) * arrowRate(R));
+        if (!R.atkOff && fireArrows(R)) Ws.arrowT = (S.normalInterval || 0.78) * (S.featherCd || 1) / (Math.max(0.2, S.haste) * arrowRate(R));
         else Ws.arrowT = 0.1;
       }
-      updateCharged(R, dt);
+      if (!R.atkOff) updateCharged(R, dt);
       // bunny charges
       const mc = maxCharges(R);
       if (Ws.bunnyCharges == null) { Ws.bunnyCharges = mc; Ws.bunnyMax = mc; }

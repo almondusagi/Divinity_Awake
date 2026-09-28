@@ -23,16 +23,27 @@ G.relics = (function () {
     er: { n: 'チャージ効率', pct: 1, main: 0.35, sub: [0.045, 0.065], w: 0.5 },
     cr: { n: '会心率', pct: 1, main: 0.20, sub: [0.027, 0.039], w: 1 },
     cd: { n: '会心ダメージ', pct: 1, main: 0.40, sub: [0.054, 0.078], w: 1 },
-    pyro: { n: '炎元素ダメージ', pct: 1, main: 0.30, sub: null, w: 0.9 },
+    pyro: { n: '炎元素ダメージ', pct: 1, main: 0.30, sub: null, w: 0.9, own: true }, // key kept for old saves: = the character's OWN element
     speed: { n: '移動速度', pct: 1, main: 0.12, sub: [0.015, 0.025], w: 0.5 },
   };
   const SUBS = ['hp_flat', 'atk_flat', 'def_flat', 'atk_pct', 'hp_pct', 'er', 'cr', 'cd', 'speed'];
   const SETS = {
     wind: { name: '風跡の騎士', c: '#5cf2c8', b2: '攻撃力 +18%', b4: '元素爆発ダメージ +35%' },
-    flame: { name: '烈火の狩人', c: '#ff7a3d', b2: '炎元素ダメージ +15%', b4: '爆発範囲 ×1.25・過負荷ダメージ +40%' },
+    flame: { name: '烈火の狩人', c: '#ff7a3d', b2: '炎元素ダメージ +15%', b4: '爆発範囲 ×1.25・元素反応ダメージ +40%' },
     luck: { name: 'モラ商人の夢', c: '#ffd24a', b2: 'モラ獲得量 +25%', b4: 'レベルアップの選択肢が 4枚 に！' },
   };
   const SET_KEYS = Object.keys(SETS);
+  /* the relics follow the character (owner: every character, not just Amber): the goblet's element main stat and
+     烈火の狩人 2pc boost the character's OWN element; 4pc bonuses use the generic stats every kit reads. */
+  let viewChar = 'amber';
+  const elOf = id => ((G.data.characters[id] || {}).element) || 'pyro';
+  const elName = id => ((G.EL && G.EL[elOf(id)]) || { name: '炎' }).name;
+  function setText(key, which, charId) {
+    const id = charId || viewChar;
+    if (key === 'flame' && which === 'b2') return elName(id) + '元素ダメージ +15%';
+    if (key === 'flame' && which === 'b4') return id === 'amber' ? SETS.flame.b4 : '攻撃範囲 ×1.15・元素反応ダメージ +40%';
+    return SETS[key][which];
+  }
 
   function data() {
     const S = G.save.data;
@@ -107,26 +118,29 @@ G.relics = (function () {
     S.critRate += t.cr || 0;
     S.critDmg += t.cd || 0;
     S.speed *= 1 + (t.speed || 0);
-    if (t.pyro) S.elBonus.pyro = (S.elBonus.pyro || 0) + t.pyro;
+    const own = (R && R.char && R.char.element) || 'pyro';
+    if (t.pyro) S.elBonus[own] = (S.elBonus[own] || 0) + t.pyro;
     if (sets.wind >= 2) S.atk *= 1.18;
-    if (sets.wind >= 4) S.rainMul *= 1.35;
-    if (sets.flame >= 2) S.elBonus.pyro = (S.elBonus.pyro || 0) + 0.15;
-    if (sets.flame >= 4) { S.explosionMul *= 1.25; S.reactionBonus += 0.4; }
+    if (sets.wind >= 4) S.burstBonus = (S.burstBonus || 0) + 0.35; // 元素爆発ダメージ +35% (every kit reads burstBonus)
+    if (sets.flame >= 2) S.elBonus[own] = (S.elBonus[own] || 0) + 0.15;
+    if (sets.flame >= 4) { if (R && R.charId === 'amber') S.explosionMul *= 1.25; else S.areaMul *= 1.15; S.reactionBonus += 0.4; }
     if (sets.luck >= 2) S.moraMul *= 1.25;
     if (sets.luck >= 4) S.offerCount = 4;
     S.relicSets = sets;
   }
   const fmt = (k, v) => ST[k].pct ? '+' + (Math.round(v * 1000) / 10) + '%' : '+' + Math.round(v);
-  const label = (k, v) => ST[k].n + ' ' + fmt(k, v);
+  const label = (k, v) => (ST[k].own ? elName(viewChar) + '元素ダメージ' : ST[k].n) + ' ' + fmt(k, v);
 
   function summary() {
     const { t, sets } = totals();
-    return { stats: Object.keys(t).map(k => ({ k, name: ST[k].n, text: label(k, t[k]) })), sets: Object.keys(sets).map(s => ({ key: s, name: SETS[s].name, count: sets[s], b2: SETS[s].b2, b4: SETS[s].b4 })) };
+    return { stats: Object.keys(t).map(k => ({ k, name: ST[k].n, text: label(k, t[k]) })), sets: Object.keys(sets).map(s => ({ key: s, name: SETS[s].name, count: sets[s], b2: setText(s, 'b2'), b4: setText(s, 'b4') })) };
   }
 
   /* ---------------- panel ---------------- */
-  function renderPanel(container) {
+  function renderPanel(container, charId) {
     const UI = G.progressionUI; UI.ensureCss();
+    viewChar = (charId && G.data.characters[charId]) ? charId : ((G.save.data.uiSel && G.save.data.uiSel.char) || 'amber');
+    const ch = G.data.characters[viewChar] || G.data.characters.amber, elc = ((G.EL && G.EL[ch.element]) || {}).color || '#ff7a3d';
     const glyph = UI.glyph;
     container.innerHTML = '';
     const root = document.createElement('div'); root.className = 'pg-panel pg-relicp'; root.style.position = 'relative';
@@ -145,7 +159,7 @@ G.relics = (function () {
     function draw() {
       const r = data(), sm = summary();
       const eqIds = new Set(Object.values(r.equipped));
-      root.innerHTML = `<div class="pg-ph"><h3>モンドの遺物</h3><span class="pg-purse"><img src="assets/icon_mora.webp" alt="">${U.fmtNum(G.save.data.mora || 0)}</span></div>
+      root.innerHTML = `<div class="pg-ph"><h3>モンドの遺物 <small class="pg-rwho" style="--c:${elc}"><img src="assets/icon_${ch.portrait || ch.id}.webp" alt="">${ch.name}のときの効果</small></h3><span class="pg-purse"><img src="assets/icon_mora.webp" alt="">${U.fmtNum(G.save.data.mora || 0)}</span></div>
         <div class="pg-rtop"><div class="pg-rbox${r.unopened ? ' has' : ''}"><img src="assets/icon_relic.webp" alt=""><div><b>未開封 ×${r.unopened}</b><small>ボスをたおすと手に入る</small><br>
         <button class="pg-btn gold pg-open" ${r.unopened ? '' : 'disabled'} style="margin-top:4px">開く！</button></div></div>
         <div class="pg-rsum">${sm.stats.length ? sm.stats.map(s => `<span class="pg-chip">${s.text}</span>`).join('') : '<span class="pg-chip off">まだ装備なし</span>'}
@@ -178,7 +192,7 @@ G.relics = (function () {
       ov.innerHTML = `<div class="pg-rcard r${p.rarity}"><div class="pg-rtop2"><div class="pg-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>
         <div><h4>${SLOT[p.slot].name}</h4>${UI.stars(p.rarity)}<div class="pg-rmain">${label(p.main.k, p.main.v)}</div></div></div>
         <ul>${p.subs.map(s => `<li>${label(s.k, s.v)}</li>`).join('')}</ul>
-        <div class="pg-rset"><b style="color:${SETS[p.set].c}">${SETS[p.set].name}</b><br>2セット: ${SETS[p.set].b2}<br>4セット: ${SETS[p.set].b4}</div>
+        <div class="pg-rset"><b style="color:${SETS[p.set].c}">${SETS[p.set].name}</b><br>2セット: ${setText(p.set, 'b2')}<br>4セット: ${setText(p.set, 'b4')}</div>
         ${!eqd && cur ? `<div class="pg-cmp ${d >= 0 ? 'up' : 'down'}">いまの装備より ${d >= 0 ? 'つよい ▲' : 'よわい ▼'}</div>` : ''}
         <div class="pg-racts"><button class="pg-btn gold a-eq" ${eqd ? 'disabled' : ''}>${eqd ? '装備中' : '装備する'}</button>
         <button class="pg-btn a-lock">${glyph('lock')} ${p.lock ? 'ロック解除' : 'ロック'}</button>

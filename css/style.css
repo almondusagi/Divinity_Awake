@@ -635,7 +635,7 @@ body.reduced-fx .t-fire i { animation: none; filter: none; } body.reduced-fx .t-
 .pb-ext .pg-ph h3 { margin: 0; font-size: 12px; font-weight: 900; color: var(--gold); letter-spacing: .16em; }
 .pb-ext .pg-brow.big { gap: 7px; }
 .pb-ext .pg-recs.big { gap: 5px; }
-@media (max-height: 520px) { .pb-ext .pg-bi { width: 36px; height: 36px; } .pb-ext .pg-rec { font-size: 11px; } }
+@media (max-height: 520px) { .pb-ext .pg-bi { width: 42px; height: 42px; } .pb-ext .pg-rec { font-size: 11px; } }
 body:not(.in-run) #rotate small { display: none; }
 
 /* ================= v4 UI additions ================= */
@@ -1137,3 +1137,98 @@ body.reduced-fx .guide.can::after, body.reduced-fx .sb-card.got .sb-ic .pg-art, 
   .subtitle { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .r-card.sil.buyable, .unlock-panel.buyable .ul-img, .unlock-panel.reveal .ul-rays { animation: none; } }
+
+/* ================= ui_v6 ================= */
+/* --- icons never show at their natural image size (256px+) — every icon box has an explicit size --- */
+.pg-art img { max-width: 100%; max-height: 100%; }
+.pg-box img { max-width: 100%; max-height: 100%; }
+.sb-tic, .sb-mic { overflow: hidden; }
+#ui .pg-bi .pg-art, #ui .pg-ri .pg-art { width: calc(100% - 6px); height: calc(100% - 6px); }
+.sb-tic .pg-art { width: 26px; height: 26px; }
+.sb-ic .pg-art { width: calc(100% - 8px); height: calc(100% - 8px); }
+.sb-mic .pg-art { width: calc(100% - 2px); height: calc(100% - 2px); }
+.sb-tic img, .sb-ic img, .sb-mic img, .pg-bi img, .pg-ri img { max-width: 100%; max-height: 100%; }
+/* the picked level-up card's icon flying into its HUD slot (fixed px box set inline by levelup.js flyIcon) */
+.pg-flyic { position: fixed; z-index: 55; pointer-events: none; overflow: visible; will-change: transform; filter: drop-shadow(0 0 10px #fff4c4) drop-shadow(0 0 22px #ffcf6b99); }
+.pg-flyic .pg-art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; max-width: none; transform: none; }
+.pg-flyic .pg-art img { width: 100%; height: 100%; animation: none !important; }
+.pg-flyic .pg-orb { width: 100%; font-size: 60%; }
+.pg-flyic .pg-badge, .pg-flyic .pg-elb { display: none; }
+
+/* --- pause menu: tap a skill icon → its description --- */
+#ui .pg-bi.sk-tap, #ui .b-item.sk-tap { cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .12s var(--ease-back), box-shadow .12s; touch-action: manipulation; }
+#ui .pg-bi.sk-tap:hover, #ui .pg-bi.sk-tap:focus-visible { transform: translateY(-2px) scale(1.06); outline: none; box-shadow: 0 0 0 2px #fff4c4, 0 0 12px var(--rc); }
+#ui .pg-bi.sk-tap:active { transform: scale(.94); }
+#ui .pg-bi.sk-on { box-shadow: 0 0 0 2.5px #fff4c4, 0 0 16px #ffcf6b; transform: translateY(-2px) scale(1.08); z-index: 2; }
+#ui .b-item.sk-on { box-shadow: inset 0 0 0 2px #fff4c4; }
+.sk-tip { margin-left: auto; font-size: 10.5px; font-weight: 800; color: #9fe8c8; letter-spacing: .04em; opacity: .9; }
+.pb-ext .pg-ph { display: flex; align-items: baseline; gap: 8px; }
+.sk-pop { position: fixed; z-index: 45; width: min(320px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; padding: 12px 14px 12px; border-radius: 14px;
+  background: linear-gradient(180deg, #243352f7, #121b30f7); color: var(--cream2, #ece5d8); box-shadow: inset 0 0 0 1.5px #d3bc8ecc, 0 10px 30px #000b;
+  font-size: 13px; line-height: 1.45; animation: skIn .18s var(--ease-back) both; transform-origin: var(--ax, 50%) 0; }
+.sk-pop.above { transform-origin: var(--ax, 50%) 100%; }
+.sk-pop::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 7px); width: 14px; height: 14px; background: #243352; transform: rotate(45deg); box-shadow: -1.5px -1.5px 0 0 #d3bc8ecc; }
+.sk-pop.below::before { top: -7px; }
+.sk-pop.above::before { bottom: -7px; background: #121b30; box-shadow: 1.5px 1.5px 0 0 #d3bc8ecc; }
+.sk-pop.out { animation: skOut .15s ease-in forwards; }
+@keyframes skIn { from { opacity: 0; transform: scale(.85); } }
+@keyframes skOut { to { opacity: 0; transform: scale(.9); } }
+.sk-x { position: absolute; right: 6px; top: 6px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #0006; color: #fff4d6; font-size: 14px; font-weight: 900; cursor: pointer; }
+.sk-hd { display: flex; align-items: center; gap: 10px; padding-right: 30px; }
+.sk-ic { position: relative; width: 48px; height: 48px; flex: none; border-radius: 10px; background: #0b1a24; box-shadow: 0 0 0 1.5px #d3bc8e88; overflow: hidden; }
+.sk-ic .pg-art { position: absolute; left: 3px; top: 3px; width: 42px; height: 42px; max-width: none; transform: none; }
+.sk-ic .pg-art img { max-width: 100%; max-height: 100%; }
+.sk-ic .pg-orb { width: 100%; font-size: 22px; box-shadow: none; } .sk-ic .pg-badge { font-size: 10px; } .sk-ic .pg-elb { width: 34%; }
+.sk-tt { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.sk-tt small { font-size: 10.5px; font-weight: 900; color: #9fe8c8; letter-spacing: .06em; }
+.sk-tt b { font-size: 16px; font-weight: 900; color: #fff4d6; }
+.sk-lv { margin-left: auto; flex: none; padding: 2px 8px; border-radius: 99px; background: #0008; color: #ffe7a8; font-size: 11.5px; font-weight: 900; white-space: nowrap; }
+.sk-lv.max { background: linear-gradient(90deg, #b8761a, #ffc34a); color: #4a2a05; }
+.sk-pips { display: flex; gap: 3px; margin: 8px 0 2px; } .sk-pips i { flex: 1; height: 5px; border-radius: 3px; background: #ffffff22; } .sk-pips i.on { background: linear-gradient(90deg, #ffd24a, #ffb347); }
+.sk-sec { margin-top: 8px; padding: 6px 9px; border-radius: 9px; background: #0005; }
+.sk-sec h5 { margin: 0 0 2px; font-size: 11px; font-weight: 900; color: #d3bc8e; letter-spacing: .08em; }
+.sk-sec.nx { background: #2fd6b014; box-shadow: inset 0 0 0 1px #5cf2c855; } .sk-sec.nx h5 { color: #8ff7e2; }
+.sk-sec.mx h5, .sk-sec.ev h5 { color: #ffd86b; }
+.sk-fx b { color: #ffe08a; }
+.sk-evos { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.sk-evo { font-size: 12px; font-weight: 800; color: #c9b8ff; } .sk-evo i { font-style: normal; margin-right: 4px; color: #ffcf6b; } .sk-evo.known { color: #ffe7a8; }
+@media (max-height: 520px) {
+  .sk-pop { width: min(300px, calc(100vw - 16px)); padding: 9px 11px; font-size: 12px; }
+  .sk-ic { width: 40px; height: 40px; } .sk-ic .pg-art { width: 34px; height: 34px; } .sk-tt b { font-size: 14px; }
+  .sk-sec { margin-top: 6px; padding: 5px 8px; }
+}
+
+/* --- title: パイモンをさがせ！ (tap → poof → half size somewhere else → … → ただいま！) --- */
+.title-paimon::before { content: ""; position: absolute; inset: -12px; border-radius: 50%; }   /* bigger tap area when she is tiny */
+.title-paimon.pm-away { position: absolute; z-index: 3; }
+.title-paimon.pm-away .ta-ring, .title-paimon.pm-away .ta-shadow { display: none; }
+.title-paimon.pm-hide { animation: pmOut .22s ease-in forwards !important; pointer-events: none; }
+.title-paimon.pm-in { animation: pmIn .5s var(--ease-back) forwards !important; }
+@keyframes pmOut { 0% { opacity: 1; transform: scale(1); } 40% { opacity: 1; transform: scale(1.15, .85); } 100% { opacity: 0; transform: scale(.1) rotate(40deg); } }
+@keyframes pmIn { 0% { opacity: 0; transform: scale(.2) rotate(-60deg); } 70% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: none; } }
+.title-paimon.bub-r .ta-bubble { right: auto; left: 78%; border-radius: 14px 14px 14px 2px; transform-origin: 0 100%; }
+.title-paimon.pm-away .ta-bubble { top: auto; bottom: 88%; }
+.pm-poof { position: absolute; z-index: 4; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.pm-poof .pf-smoke { position: absolute; left: calc(var(--s) * -.22); top: calc(var(--s) * -.22); width: calc(var(--s) * .44); height: calc(var(--s) * .44); border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #e8f4ff 45%, #c9d8ee00 72%); opacity: 0; animation: pfSmoke .75s ease-out var(--dl, 0s) forwards; }
+@keyframes pfSmoke { 0% { opacity: .95; transform: translate(0, 0) scale(.4); } 60% { opacity: .8; } 100% { opacity: 0; transform: translate(calc(var(--dx) * var(--s) * .55), calc(var(--dy) * var(--s) * .55 - 10px)) scale(1.5); } }
+.pm-poof .pf-spark { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; background: #fff4c4; opacity: 0;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); filter: drop-shadow(0 0 4px #ffd24a); animation: pfSpark .8s ease-out var(--dl, 0s) forwards; }
+@keyframes pfSpark { 0% { opacity: 1; transform: translate(0, 0) scale(.6) rotate(0deg); } 100% { opacity: 0; transform: translate(calc(var(--dx) * var(--s) * .9), calc(var(--dy) * var(--s) * .9)) scale(1.4) rotate(180deg); } }
+.pm-poof.gold .pf-spark { background: #ffd24a; width: 11px; height: 11px; }
+.pm-chip { position: absolute; z-index: 4; left: 50%; top: calc(12px + var(--safe-t)); transform: translateX(-50%); display: flex; align-items: center; gap: 6px; padding: 4px 12px 4px 8px; border-radius: 99px;
+  background: linear-gradient(180deg, #243352e6, #121b30e6); box-shadow: inset 0 0 0 1px #d3bc8e99, 0 4px 12px #0008; color: #fff4d6; font-size: 12px; font-weight: 900; letter-spacing: .04em;
+  opacity: 0; pointer-events: none; white-space: nowrap; }
+.pm-chip i { font-style: normal; color: #ffd24a; }
+.pm-chip.on { animation: pmChip 2.6s var(--ease-back) forwards; }
+.pm-chip.big.on { animation-duration: 3.6s; box-shadow: inset 0 0 0 1.5px #ffcf6b, 0 0 18px #ffc34a88; }
+@keyframes pmChip { 0% { opacity: 0; transform: translate(-50%, -10px) scale(.8); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1.06); } 16% { transform: translate(-50%, 0); } 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+@media (prefers-reduced-motion: reduce) { .pm-poof .pf-smoke, .pm-poof .pf-spark { animation-duration: .3s; } }
+
+/* ---- normal-attack stop toggle (owner 2026-09-28): phone button above スキル; PC = X key ---- */
+.t-hold { width: 58px; height: 58px; right: calc(161px + var(--safe-r)); bottom: calc(150px + var(--safe-b)); flex-direction: column; gap: 0; font-weight: 900; color: var(--cream); }
+.t-hold .t-hold-ic { font-style: normal; font-size: 20px; line-height: 1; }
+.t-hold b { font-size: 10px; letter-spacing: .02em; margin-top: 2px; }
+.t-hold.off { background: radial-gradient(circle at 50% 35%, #6a2a2a, #2a1016); box-shadow: 0 0 0 2px #ff9d8a, 0 0 14px #ff6a5a88; }
+.t-hold.off .t-hold-ic { opacity: .45; text-decoration: line-through; }
+@media (max-height: 420px) { .t-hold { width: 50px; height: 50px; right: calc(149px + var(--safe-r)); bottom: calc(132px + var(--safe-b)); } }

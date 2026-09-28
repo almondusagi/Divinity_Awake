@@ -2,7 +2,7 @@
      G.ui.levelUp(R, offer, onPick)            gorgeous level-up card picker (keys 1-4 / arrows / Enter, reroll)
      G.ui.chest(R, tier, keys, mora, done, got) Genshin-wish-style chest reveal (tap to skip)
      G.progressionUI.renderMeta(container)      天賦の星図 star-map skill tree over G.data.meta (G.data.metaTree layout)
-     G.progressionUI.renderConstellation(container)  Amber 命ノ星座 C1–C6
+     G.progressionUI.renderConstellation(container, charId)  命ノ星座 C1–C6 of that character (renderMeta takes charId too)
      G.progressionUI.glyph(name) / art(key) / ensureCss()  shared helpers (also used by relics.js)
    All CSS is scoped under .pg-* and injected as <style id="progression-css">. */
 'use strict';
@@ -39,6 +39,12 @@ G.progressionUI = (function () {
     eye: '<path d="M12 5C6.5 5 2.6 9.2 1 12c1.6 2.8 5.5 7 11 7s9.4-4.2 11-7c-1.6-2.8-5.5-7-11-7zm0 11.2a4.2 4.2 0 1 1 0-8.4 4.2 4.2 0 0 1 0 8.4z"/><circle cx="12" cy="12" r="2"/>',
     book: '<path d="M2 4.5C5 3 8.5 3 12 5c3.5-2 7-2 10-.5V20c-3-1.5-6.5-1.5-10 .5-3.5-2-7-2-10-.5z"/><path fill="#0006" d="M11.2 6.2h1.6v13h-1.6z"/>',
     lock: '<path d="M6 10V7a6 6 0 0 1 12 0v3h1.5v12h-15V10zm3 0h6V7a3 3 0 0 0-6 0z"/>',
+    // character stars
+    blade: '<path d="M21.8 2.2l-.6 4.6L9.6 18.4l-4-4L17.2 2.8z"/><path d="M4.2 13l6.8 6.8-1.4 1.4-2.1-1.3-2.9 2.9-1.4-1.4 2.9-2.9-1.3-2.1z"/><path fill="#0005" d="M19.6 4.4l-10 10-.9-.9 10-10z"/>',
+    gsword: '<path d="M22 2l-1 6.5-11 11-6.5-6.5 11-11z"/><path d="M3 12.5l8.5 8.5-1.8 1.8-2-1.4-2.7 2.7-1.9-1.9 2.7-2.7-1.4-2z"/><path fill="#0005" d="M19.3 4.7L8.6 15.4l-1-1L18.3 3.7z"/>',
+    gem: '<path d="M12 1.5l7.5 7.2L12 22.5 4.5 8.7z"/><path fill="#fff7" d="M12 1.5l3.2 7.2H8.8z"/><path fill="#0004" d="M12 22.5l7.5-13.8h-4.3z"/>',
+    rain: '<path d="M6 16.5A5 5 0 0 1 6.6 6.6 6.5 6.5 0 0 1 19 8.2a4.2 4.2 0 0 1-.5 8.3z"/><path d="M7 18.5l-1.6 4h1.8l1.6-4zM12 18.5l-1.6 4h1.8l1.6-4zM17 18.5l-1.6 4h1.8l1.6-4z"/>',
+    snow: '<path d="M11 1h2v22h-2z"/><path d="M1.6 6.5l1-1.7 19.8 12.7-1 1.7z"/><path d="M1.6 17.5l19.8-12.7 1 1.7L2.6 19.2z"/><path d="M9 2.5l3 3 3-3 1 1-4 4-4-4zM9 21.5l3-3 3 3 1-1-4-4-4 4z"/>',
   };
   function glyph(name, cls) {
     return '<svg class="pg-glyph ' + (cls || '') + '" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' + (P[name] || P.star) + '</svg>';
@@ -57,10 +63,8 @@ G.progressionUI = (function () {
   function art(key, big) {
     const up = G.upgrades[key] || (G.progression.def && G.progression.def(key)) || {};
     let h = '';
-    if (key === 'explosion_radius') h = '<i class="pg-sheet" style="background-image:url(assets/fx_explosion.webp);background-size:400% 200%;background-position:66.66% 0"></i>';
-    else if (up.cat === 'stat' && up.glyph) h = `<i class="pg-orb" style="--c:${STAT_COL[up.glyph] || '#fff'}">${glyph(up.glyph)}</i>`;
-    else if (up.cat === 'bless') h = `<i class="pg-orb pg-gorb" style="--c:#ffc34a">${glyph(up.glyph || 'star')}</i><img class="pg-gico" src="assets/icon_${up.icon || 'relic'}.webp" alt="" draggable="false">`;
-    else h = `<img src="assets/icon_${up.icon || 'relic'}.webp" alt="" draggable="false">`;
+    if (up.cat === 'stat' && up.glyph) h = `<i class="pg-orb" style="--c:${STAT_COL[up.glyph] || '#fff'}">${glyph(up.glyph)}</i>`;
+    else h = `<img src="assets/icon_${up.icon || 'relic'}.webp" width="96" height="96" alt="" draggable="false">`;   // width/height = safe fallback size (never the 256px natural size)
     if (up.badge) h += `<b class="pg-badge">${up.badge}</b>`;
     if (up.el && up.cat !== 'stat') h += elBadge(up.el);
     return `<div class="pg-art${big ? ' big' : ''}">${h}</div>`;
@@ -231,11 +235,13 @@ G.progressionUI = (function () {
 .pg-node.next circle.halo{opacity:.7;animation:pgNodePulse 1.2s ease-in-out infinite alternate}
 .pg-node.sel circle.ring{stroke:#fff;stroke-width:2.5}
 .pg-node path{fill:#56627d;transition:fill .3s}
-.pg-node.on path{fill:#ffe9a8}
+.pg-node.on path{fill:var(--cc,#ffe9a8)}
 .pg-node.next path{fill:#9fb8ff}
 @keyframes pgNodePulse{to{opacity:.25}}
 .pg-link{stroke:#8ea2d066;stroke-width:1.5;stroke-dasharray:3 4}
-.pg-link.on{stroke:#ffe9a8;stroke-width:2.5;stroke-dasharray:none;filter:drop-shadow(0 0 4px #ffd24a)}
+.pg-link.on{stroke:var(--cc,#ffe9a8);stroke-width:2.5;stroke-dasharray:none;filter:drop-shadow(0 0 4px var(--cc,#ffd24a))}
+.pg-who,.pg-rwho{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 10px 1px 3px;border-radius:99px;font-size:.62em;font-weight:900;vertical-align:.18em;color:#fff;background:#0007;border:1.5px solid var(--c,#ffd24a);box-shadow:0 0 8px var(--c,#ffd24a)}
+.pg-who img,.pg-rwho img{width:1.7em;height:1.7em;border-radius:50%;object-fit:cover;background:#fff2}
 .pg-cinfo{flex:1 1 240px;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:#0e1f29e6;border:1.5px solid #f0d49a44}
 .pg-cinfo .pg-cn{font-size:12px;font-weight:800;color:#9fb8ff}
 .pg-cinfo h4{margin:0;font-size:20px;font-weight:900}
@@ -605,6 +611,32 @@ G.progressionUI = (function () {
     }
   }
 
+  /* ui_v6: the picked card's icon flies — inside a fixed-size box (.pg-flyic, style.css) — into its HUD slot
+     (owned row top-left; stats go to the portrait). Web Animations only: no unsized <img> ever reaches the screen. */
+  function flyIcon(key, card) {
+    try {
+      const a = card.querySelector('.pg-art'), ar = (a || card).getBoundingClientRect();
+      const S = Math.round(U.clamp(Math.min(ar.width, ar.height) || 64, 28, 96));
+      const x0 = ar.left + ar.width / 2, y0 = ar.top + ar.height / 2;
+      const hs = G.hud && G.hud.slotRect ? G.hud.slotRect(key) : null;
+      const tx = hs ? hs.x + hs.w / 2 : 40, ty = hs ? hs.y + hs.h / 2 : 70, k = (hs ? hs.w * 0.9 : 28) / S;
+      const f = document.createElement('div'); f.className = 'pg-flyic'; f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = `left:${Math.round(x0 - S / 2)}px;top:${Math.round(y0 - S / 2)}px;width:${S}px;height:${S}px`;
+      f.innerHTML = art(key);
+      document.body.append(f);
+      const dx = tx - x0, dy = ty - y0, done = () => { if (f.isConnected) f.remove(); G.hud && G.hud.pop && G.hud.pop(key); };
+      if (!f.animate || reduced()) { setTimeout(done, 200); return; }
+      const an = f.animate([
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { transform: 'translate(0,-18px) scale(1.18)', opacity: 1, offset: 0.2 },
+        { transform: `translate(${dx * 0.5}px,${dy * 0.5 - 50}px) scale(${((1 + k) / 2).toFixed(3)}) rotate(-190deg)`, opacity: 1, offset: 0.62 },
+        { transform: `translate(${dx}px,${dy}px) scale(${k.toFixed(3)}) rotate(-360deg)`, opacity: 0.85 },
+      ], { duration: 640, easing: 'cubic-bezier(.45,0,.55,1)', fill: 'forwards' });
+      an.onfinish = done;
+      setTimeout(() => { if (f.isConnected) f.remove(); }, 1600);
+    } catch (e) { }
+  }
+
   /* ------------------------------------------------------------------ LEVEL UP */
   const reduced = () => !!(G.save.data.settings && G.save.data.settings.reducedFx);
   function levelUp(R, offer, onPick) {
@@ -661,12 +693,12 @@ G.progressionUI = (function () {
       done = true; timers.forEach(clearTimeout);
       const key = cur[i], chosen = box.children[i];
       const up = G.progression.def(key), fx = +chosen.dataset.fx || 3;
-      // the chosen card pops, bursts and gets sucked into the build bar (bottom-left)
+      // ui_v6: the chosen card pops & fades in place, and a SMALL copy of its icon (fixed px box) flies into its HUD slot.
+      // (the whole card used to shrink toward the build bar — no element is ever shown at an unconstrained size now)
       const r = chosen.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const tgt = ov.querySelector('.pg-build-mini'), tr = tgt && tgt.offsetParent ? tgt.getBoundingClientRect() : null;
-      const tx = tr && tr.width ? tr.left + 30 : 40, ty = tr && tr.height ? tr.top + 20 : innerHeight - 30;
-      chosen.style.setProperty('--tx', (tx - cx) + 'px'); chosen.style.setProperty('--ty', (ty - cy) + 'px');
+      chosen.style.animation = 'pgChosen .3s ease-out forwards';
       chosen.classList.add('chosen'); box.classList.add('picked');
+      flyIcon(key, chosen);
       const ring = document.createElement('i'); ring.className = 'pg-pickring'; ring.style.cssText = `left:${cx}px;top:${cy}px;--rc:${RC[fx] || RC[3]}`; ov.append(ring);
       G.audio.sfx('ui'); if (fx >= 4) G.audio.sfx('star', { rarity: fx });
       if (fx >= 5) G.audio.sfx('chestReveal', { rarity: 5 });
@@ -925,7 +957,7 @@ G.progressionUI = (function () {
       .map(e => ({ e, st: recipeState(R, e) })).sort((a, b) => (!!a.st.done - !!b.st.done) || (!!b.st.ready - !!a.st.ready) || ((a.st.left || 0) - (b.st.left || 0)));
     const items = own.map(k => {
       const u = G.upgrades[k], lv = R.levels[k], evo = (G.evolutions || []).find(e => e.base === k && R.evolved[e.key]);
-      return `<div class="pg-bi r${u.rarity}${evo ? ' evo' : ''}" title="${u.name}">${art(evo ? evo.key : k)}<b>${lv >= u.max ? 'MAX' : 'Lv.' + lv}</b></div>`;
+      return `<div class="pg-bi r${u.rarity}${evo ? ' evo' : ''}" title="${u.name}" data-key="${k}"${evo ? ` data-evo="${evo.key}"` : ''}>${art(evo ? evo.key : k)}<b>${lv >= u.max ? 'MAX' : 'Lv.' + lv}</b></div>`;
     }).join('');
     const rec = recipes.slice(0, mini ? 2 : 9).map(({ e, st }) => `<div class="pg-rec${st.ready ? ' ready' : st.done ? ' done' : st.left <= 2 ? ' near' : ''}">
       ${reqIcons(R, e)}→<span class="pg-ri gold${known(e.key) ? '' : ' sil'}">${art(e.key)}</span>
@@ -953,13 +985,21 @@ G.progressionUI = (function () {
     if (d.max === 1) return lv ? '<b>解放済み！</b>' : 'まだ';
     return `${d.name} <b>${metaFx(d, lv)}</b>`;
   }
-  function renderMeta(container) {
+  /** the character whose home panels are shown (screens.js passes it; fallback = the saved selection) */
+  function panelChar(charId) {
+    const C = G.data.characters, u = G.save.data.uiSel;
+    const id = charId || (u && u.char) || 'amber';
+    return C[id] ? id : 'amber';
+  }
+  function renderMeta(container, charId) {
     ensureCss();
     const S = G.save.data; if (!S.meta || typeof S.meta !== 'object') S.meta = {};
-    const TR = G.data.metaTree, NODES = TR.nodes, keys = Object.keys(NODES).filter(k => G.data.meta[k]);
+    const cid = panelChar(charId), CH = G.data.characters[cid];
+    const TR = G.progression.metaTree(cid), NODES = TR.nodes, DEF = k => G.progression.metaDef(k, cid);
+    const keys = Object.keys(NODES).filter(k => G.data.meta[k]);
     container.innerHTML = '';
     const root = document.createElement('div'); root.className = 'pg-panel pg-metap';
-    root.innerHTML = `<div class="pg-ph"><h3>天賦の星図</h3><span class="st-prog"></span><span class="pg-purse"></span></div>
+    root.innerHTML = `<div class="pg-ph"><h3>天賦の星図 <small class="pg-who" style="--c:${TR.branches.char ? TR.branches.char.c : '#ffd24a'}"><img src="assets/icon_${CH.portrait || cid}.webp" alt="">${CH.name}</small></h3><span class="st-prog"></span><span class="pg-purse"></span></div>
       <div class="st-wrap"><div class="st-map"><svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet"></svg></div><div class="st-info"></div></div>`;
     container.append(root);
     const svg = root.querySelector('svg'), info = root.querySelector('.st-info'), map = root.querySelector('.st-map');
@@ -967,21 +1007,21 @@ G.progressionUI = (function () {
     const lvOf = k => (k === 'root' ? 1 : (S.meta[k] | 0));
     const open = k => { const n = NODES[k]; return !n || n.parent === 'root' || lvOf(n.parent) > 0 || lvOf(k) > 0; };
     const costOf = k => G.data.metaCost(k, lvOf(k));
-    const state = k => { const d = G.data.meta[k], l = lvOf(k); if (l >= d.max) return 'max'; if (!open(k)) return 'locked'; return (S.mora || 0) >= costOf(k) ? 'can' : 'open'; };
+    const state = k => { const d = DEF(k), l = lvOf(k); if (l >= d.max) return 'max'; if (!open(k)) return 'locked'; return (S.mora || 0) >= costOf(k) ? 'can' : 'open'; };
     let sel = keys.find(k => state(k) === 'can') || keys.find(k => state(k) === 'open') || keys[0];
     // static backdrop (stars + faint branch nebulae) built once
     let bg = `<defs><filter id="stGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       <radialGradient id="stHalo"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".3" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient></defs>`;
-    const neb = { atk: [90, 80], def: [90, 220], wind: [310, 80], gold: [310, 220] };
-    for (const b in neb) bg = bg.replace('</defs>', `<radialGradient id="stNeb_${b}"><stop offset="0" stop-color="${TR.branches[b].c}" stop-opacity=".16"/><stop offset="1" stop-color="${TR.branches[b].c}" stop-opacity="0"/></radialGradient></defs>`)
-      + `<circle cx="${neb[b][0]}" cy="${neb[b][1]}" r="110" fill="url(#stNeb_${b})"/>`;
+    const neb = { atk: [90, 80, 110], def: [90, 220, 110], wind: [310, 80, 110], gold: [310, 220, 110], char: [200, 62, 78] };
+    for (const b in neb) if (TR.branches[b]) bg = bg.replace('</defs>', `<radialGradient id="stNeb_${b}"><stop offset="0" stop-color="${TR.branches[b].c}" stop-opacity="${b === 'char' ? '.26' : '.16'}"/><stop offset="1" stop-color="${TR.branches[b].c}" stop-opacity="0"/></radialGradient></defs>`)
+      + `<circle cx="${neb[b][0]}" cy="${neb[b][1]}" r="${neb[b][2]}" fill="url(#stNeb_${b})"/>`;
     for (let i = 0; i < 70; i++) { const x = (i * 97 + 13) % 400, y = (i * 53 + i * i * 7) % 300; bg += `<circle class="st-tw" style="--td:${(i % 7) * 0.4}s" cx="${x}" cy="${y}" r="${(i % 3) * 0.4 + 0.4}" fill="#fff" opacity="${0.15 + (i % 4) * 0.1}"/>`; }
     const R = 15, C = 2 * Math.PI * (R + 3.5);
     function draw() {
       let h = bg, links = '', nodes = '';
       let total = 0, have = 0, canN = 0, minNeed = Infinity;
       for (const k of keys) {
-        const n = NODES[k], d = G.data.meta[k], l = lvOf(k), st = state(k), par = n.parent === 'root' ? TR.root : NODES[n.parent];
+        const n = NODES[k], d = DEF(k), l = lvOf(k), st = state(k), par = n.parent === 'root' ? TR.root : NODES[n.parent];
         const col = TR.branches[n.br].c;
         total += d.max; have += Math.min(l, d.max);
         if (st === 'can') canN++;
@@ -1013,8 +1053,8 @@ G.progressionUI = (function () {
       purse(pEl);
     }
     function drawInfo() {
-      const k = sel, d = G.data.meta[k], n = NODES[k], l = lvOf(k), st = state(k), col = TR.branches[n.br].c, cost = costOf(k);
-      const parName = n.parent === 'root' ? '' : G.data.meta[n.parent].name;
+      const k = sel, d = DEF(k), n = NODES[k], l = lvOf(k), st = state(k), col = TR.branches[n.br].c, cost = costOf(k);
+      const parName = n.parent === 'root' ? '' : DEF(n.parent).name;
       let act = '';
       if (st === 'max') act = `<button class="pg-btn gold" disabled>MAX！</button>`;
       else if (st === 'locked') act = `<div class="st-lock">${glyph('lock')} 先に「${parName}」を Lv1 にしよう</div>`;
@@ -1024,13 +1064,13 @@ G.progressionUI = (function () {
       const plain = d.max === 1 || k === 'reroll' || d.keystone;
       const fx = l < d.max ? `<div class="st-fx">${metaLine(k, d, l)} <i>→</i> ${metaLine(k, d, l + 1)}</div>` : `<div class="st-fx">${metaLine(k, d, l)}</div>`;
       info.style.setProperty('--c', col);
-      info.innerHTML = `<div class="st-br">${TR.branches[n.br].name}${d.keystone ? ' ・ <b>要の星</b>' : ''}</div>
+      info.innerHTML = `<div class="st-br">${TR.branches[n.br].name}${n.br === 'char' ? ` ・ <b>${CH.name}専用</b>` : ''}${d.keystone ? ' ・ <b>要の星</b>' : ''}</div>
         <div class="st-name"><i class="pg-orb" style="--c:${col}">${glyph(d.glyph)}</i><span>${d.name}</span>${up}</div>
         ${plain ? `<div class="st-desc">${d.desc}</div>` : ''}${d.max === 1 ? '' : fx}<div class="st-act">${act}</div>`;
       const b = info.querySelector('.st-buy'); if (b) b.addEventListener('click', () => buy(k));
     }
     function buy(key) {
-      const d = G.data.meta[key], lv = lvOf(key), st = state(key);
+      const d = DEF(key), lv = lvOf(key), st = state(key);
       if (st === 'max') return;
       if (st !== 'can') {
         G.audio.sfx('denied');
@@ -1065,33 +1105,38 @@ G.progressionUI = (function () {
     return root;
   }
 
-  /* ------------------------------------------------------------------ HOME: constellation */
-  const NODES = [[70, 200], [120, 120], [185, 70], [250, 105], [300, 175], [345, 95]]; // a hopping-bunny arc
-  function setConstellation(n) {
-    const S = G.save.data; if (!S.constellation || typeof S.constellation !== 'object') S.constellation = {};
-    S.constellation.amber = n;
-  }
-  function renderConstellation(container) {
+  /* ------------------------------------------------------------------ HOME: constellation (per character) */
+  // node layouts (viewBox 400×260): a hopping-bunny arc, a sword's zig-zag, a jade screen, a falling spirit blade
+  const CONS_LAYOUT = {
+    amber: [[70, 200], [120, 120], [185, 70], [250, 105], [300, 175], [345, 95]],
+    xingqiu: [[62, 196], [118, 140], [182, 168], [240, 104], [300, 128], [345, 58]],
+    ningguang: [[70, 96], [132, 58], [196, 96], [260, 58], [322, 96], [196, 200]],
+    chongyun: [[72, 66], [128, 118], [188, 78], [240, 150], [300, 108], [346, 196]],
+  };
+  const CONS_COL = { amber: '#ffe07a', xingqiu: '#a8e4ff', ningguang: '#ffe9a0', chongyun: '#d2f6ff' };
+  function renderConstellation(container, charId) {
     ensureCss();
-    const C = G.progression.constellations;
+    const cid = panelChar(charId), CH = G.data.characters[cid];
+    const C = G.progression.constellationsOf(cid), NODES = CONS_LAYOUT[cid] || CONS_LAYOUT.amber, col = CONS_COL[cid] || '#ffe07a';
+    const lvl = () => G.progression.constellationLevel(cid);
     container.innerHTML = '';
-    const root = document.createElement('div'); root.className = 'pg-panel pg-consp';
-    root.innerHTML = `<div class="pg-ph"><h3>命ノ星座 — アンバー</h3><span class="pg-purse"></span></div>
-      <div class="pg-cons"><div class="pg-map"><img class="pg-ghost" src="assets/icon_amber.webp" alt=""><svg viewBox="0 0 400 260" preserveAspectRatio="xMidYMid meet"></svg></div><div class="pg-cinfo"></div></div>`;
+    const root = document.createElement('div'); root.className = 'pg-panel pg-consp'; root.style.setProperty('--cc', col);
+    root.innerHTML = `<div class="pg-ph"><h3>命ノ星座 — ${CH.name}</h3><span class="pg-purse"></span></div>
+      <div class="pg-cons"><div class="pg-map"><img class="pg-ghost" src="assets/icon_${CH.portrait || cid}.webp" alt=""><svg viewBox="0 0 400 260" preserveAspectRatio="xMidYMid meet"></svg></div><div class="pg-cinfo"></div></div>`;
     container.append(root);
     const svg = root.querySelector('svg'), info = root.querySelector('.pg-cinfo'), map = root.querySelector('.pg-map'), pEl = root.querySelector('.pg-purse');
-    let sel = Math.min(5, G.progression.constellationLevel());
+    let sel = Math.min(5, lvl());
     function draw() {
-      const n = G.progression.constellationLevel();
-      let h = `<defs><radialGradient id="pgHalo"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#ffe07a"/><stop offset="1" stop-color="#ffe07a" stop-opacity="0"/></radialGradient></defs>`;
+      const n = lvl();
+      let h = `<defs><radialGradient id="pgHalo"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="${col}"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></radialGradient></defs>`;
       for (let i = 0; i < 40; i++) { const x = (i * 97) % 400, y = (i * 53 + i * i) % 260; h += `<circle cx="${x}" cy="${y}" r="${(i % 3) * 0.4 + 0.5}" fill="#fff" opacity="${0.2 + (i % 4) * 0.12}"/>`; }
       for (let i = 1; i < NODES.length; i++) h += `<line class="pg-link${i < n ? ' on' : ''}" x1="${NODES[i - 1][0]}" y1="${NODES[i - 1][1]}" x2="${NODES[i][0]}" y2="${NODES[i][1]}"/>`;
       NODES.forEach(([x, y], i) => {
         const st = i < n ? 'on' : i === n ? 'next' : 'off';
         h += `<g class="pg-node ${st}${i === sel ? ' sel' : ''}" data-i="${i}" transform="translate(${x} ${y})"><circle class="halo" r="34"/>
-          <circle class="ring" r="17" fill="#0b1430" stroke="${i < n ? '#ffe07a' : '#8ea2d0'}" stroke-width="1.5"/>
+          <circle class="ring" r="17" fill="#0b1430" stroke="${i < n ? col : '#8ea2d0'}" stroke-width="1.5"/>
           <path transform="translate(-11 -11) scale(.92)" d="${'M12 1.6l3.1 6.9 7.5.8-5.6 5 1.6 7.4L12 17.9l-6.6 3.8L7 14.3l-5.6-5 7.5-.8z'}"/>
-          <text y="33" text-anchor="middle" font-size="12" font-weight="900" fill="${i < n ? '#ffe07a' : '#9fb0d0'}">C${i + 1}</text></g>`;
+          <text y="33" text-anchor="middle" font-size="12" font-weight="900" fill="${i < n ? col : '#9fb0d0'}">C${i + 1}</text></g>`;
       });
       svg.innerHTML = h;
       svg.querySelectorAll('.pg-node').forEach(g => g.addEventListener('click', () => { sel = +g.dataset.i; G.audio.sfx('uiHover'); draw(); }));
@@ -1105,16 +1150,16 @@ G.progressionUI = (function () {
       purse(pEl);
     }
     function unlock(i) {
-      const n = G.progression.constellationLevel(), c = C[i]; if (i !== n) return;
+      const n = lvl(), c = C[i]; if (i !== n) return;
       if ((G.save.data.mora || 0) < c.cost) { G.audio.sfx('denied'); return; }
-      G.save.data.mora -= c.cost; setConstellation(n + 1); G.save.write();
+      G.save.data.mora -= c.cost; G.progression.setConstellation(cid, n + 1); G.save.write();
       G.audio.sfx('star'); G.audio.sfx('levelup');
       const r = map.getBoundingClientRect(), vb = svg.getBoundingClientRect();
       const sc = Math.min(vb.width / 400, vb.height / 260), ox = (vb.width - 400 * sc) / 2, oy = (vb.height - 260 * sc) / 2;
       const fx = document.createElement('div'); fx.className = 'pg-flare';
       fx.style.left = (vb.left - r.left + ox + NODES[i][0] * sc) + 'px'; fx.style.top = (vb.top - r.top + oy + NODES[i][1] * sc) + 'px';
       map.append(fx); setTimeout(() => fx.remove(), 1000);
-      sparks(map, parseFloat(fx.style.left), parseFloat(fx.style.top), 30, '#ffe07a', 140);
+      sparks(map, parseFloat(fx.style.left), parseFloat(fx.style.top), 30, col, 140);
       sel = Math.min(5, i + 1); draw();
       G.bus.emit('moraChange', G.save.data.mora);
     }

@@ -1,5 +1,5 @@
 /* progression.js — stats pipeline, XP/levels, level-up offers, rerolls, chests & evolutions,
-   elemental resonance, Amber constellations (owner: PROGRESSION).
+   elemental resonance, per-character constellations + character stars (owner: PROGRESSION).
    Catalogue lives in upgrades.js (G.upgrades). UIs live in levelup.js (G.ui.levelUp / G.ui.chest / G.progressionUI).
 
    Extra R.stats flags provided for COMBAT (all always present):
@@ -25,7 +25,8 @@ G.upgrades = G.upgrades || {};
 G.progression = (function () {
   const U = G.u;
 
-  /* ---------------- Amber constellations (命ノ星座) ---------------- */
+  /* ---------------- constellations (命ノ星座) — 6 per character, same prices for everyone ----------------
+     Save: G.save.data.constellation = {amber:n, xingqiu:n, …} (an old plain number = Amber's level). */
   const CONST = [
     { id: 'c1', name: '双つの矢', cost: 800, text: '通常攻撃で矢をもう1本撃つ（60%の威力）', short: '矢 +1本' },
     { id: 'c2', name: '伯爵の火薬', cost: 1500, text: 'ウサギ伯爵の爆発ダメージ +60%', short: '伯爵ダメ +60%' },
@@ -34,11 +35,64 @@ G.progression = (function () {
     { id: 'c5', name: '燃える矢の雨', cost: 4600, text: '元素爆発 レベル+3（矢の雨の威力 ×1.3）', short: '爆発Lv +3' },
     { id: 'c6', name: '燎原の火', cost: 6000, text: '元素爆発中、攻撃力と移動速度 +15%（10秒）', short: '攻撃・移動 +15%' },
   ];
-  function constellationLevel() {
-    const s = G.save.data; const v = s.constellation;
-    const n = typeof v === 'number' ? v : (v && typeof v.amber === 'number' ? v.amber : 0);
+  const CONST_BY = {
+    amber: CONST,
+    xingqiu: [
+      { id: 'c1', name: '昔日の余香', cost: 800, text: '雨すだれの剣が 4本になる。回る剣の威力 +30%', short: '雨すだれ+1・剣+30%' },
+      { id: 'c2', name: '天青の虹', cost: 1500, text: '裁雨留虹が 3秒長く降る。水元素ダメージ +15%', short: '爆発+3秒・水+15%' },
+      { id: 'c3', name: '文武の心', cost: 2400, text: '元素スキル レベル+3（画雨籠山の威力 ×1.3）', short: 'スキルLv +3' },
+      { id: 'c4', name: '悪を鎮める剣', cost: 3400, text: '裁雨留虹が降っているあいだ、画雨籠山の威力 +50%', short: '爆発中スキル +50%' },
+      { id: 'c5', name: '雨を裂く空', cost: 4600, text: '元素爆発 レベル+3（裁雨留虹の威力 ×1.3）', short: '爆発Lv +3' },
+      { id: 'c6', name: '我が詩の剣', cost: 6000, text: '裁雨留虹の剣が 1回に +2本。降っているあいだ エネルギーが回復する', short: '雨の剣+2・エネルギー' },
+    ],
+    ningguang: [
+      { id: 'c1', name: '砕けた宝石', cost: 800, text: '石粒が当たると まわりにも 小さな岩の爆発（石粒の20%）', short: '石粒が爆発' },
+      { id: 'c2', name: '屏風の衝撃', cost: 1500, text: '璇璣屏が砕けると 岩の大爆発！ 時間で砕けたら すぐにもう一度使える', short: '屏風が爆発・CTリセット' },
+      { id: 'c3', name: '玉の宮殿', cost: 2400, text: '元素スキル レベル+3（璇璣屏の威力 ×1.3）', short: 'スキルLv +3' },
+      { id: 'c4', name: '玉の守り', cost: 3400, text: '璇璣屏のクールタイム -20%。屏風があるあいだ 受けるダメージ -15%', short: 'CT-20%・守り' },
+      { id: 'c5', name: '七星の輝き', cost: 4600, text: '元素爆発 レベル+3（天権崩玉の威力 ×1.3）', short: '爆発Lv +3' },
+      { id: 'c6', name: '天権の威光', cost: 6000, text: '天権崩玉を撃つと 10秒のあいだ 石粒 +7粒', short: '爆発後 石粒+7' },
+    ],
+    chongyun: [
+      { id: 'c1', name: '氷の刃', cost: 800, text: '連撃の最後に 氷の刃が3本 前へ飛ぶ（1本 40%・貫通）', short: '氷の刃 ×3' },
+      { id: 'c2', name: '霜のめぐり', cost: 1500, text: '霜の領域の中では クールタイム -15%（スキルも 大剣の休みも）', short: '領域でCT-15%' },
+      { id: 'c3', name: '雲を開く剣', cost: 2400, text: '元素爆発 レベル+3（雲開星落の威力 ×1.3）', short: '爆発Lv +3' },
+      { id: 'c4', name: '凍てつく空', cost: 3400, text: '氷がついた敵に攻撃が当たると エネルギー +2（1.5秒に1回）', short: 'エネルギー回復' },
+      { id: 'c5', name: '霊刃の極意', cost: 4600, text: '元素スキル レベル+3（重華積霜の威力 ×1.3）', short: 'スキルLv +3' },
+      { id: 'c6', name: '四つの霊刃', cost: 6000, text: '雲開星落の霊刃が +1本・威力 +15%', short: '霊刃+1・+15%' },
+    ],
+  };
+  const curChar = () => (G.run && G.run.charId) || 'amber';
+  function constellationsOf(charId) { return CONST_BY[charId || curChar()] || CONST; }
+  /** constellation level of a character (default: the running character, else Amber) */
+  function constellationLevel(charId) {
+    charId = charId || curChar();
+    const v = G.save.data.constellation;
+    const n = typeof v === 'number' ? (charId === 'amber' ? v : 0) : (v && typeof v[charId] === 'number' ? v[charId] : 0);
     return U.clamp(n | 0, 0, 6);
   }
+  /** writes a character's level; migrates an old plain-number save to {amber:n} first (keeps Amber's stars) */
+  function setConstellation(charId, n) {
+    const S = G.save.data, v = S.constellation;
+    if (!v || typeof v !== 'object') S.constellation = typeof v === 'number' ? { amber: U.clamp(v | 0, 0, 6) } : {};
+    S.constellation[charId] = U.clamp(n | 0, 0, 6);
+  }
+
+  /* ---------------- star map helpers (shared stars + the selected character's own branch) ---------------- */
+  /** meta definition with the character's names/texts applied (矢の本数 → 剣の本数 …) */
+  function metaDef(key, charId) {
+    const d = G.data.meta[key]; if (!d) return d;
+    const t = G.data.metaText && G.data.metaText[charId] && G.data.metaText[charId][key];
+    return t ? Object.assign({}, d, t) : d;
+  }
+  /** {nodes, branches} for charId: shared nodes + that character's branch (br:'char') */
+  function metaTree(charId) {
+    const TR = G.data.metaTree, mc = G.data.metaChar && G.data.metaChar[charId];
+    const nodes = Object.assign({}, TR.nodes, mc ? mc.nodes : null);
+    const branches = Object.assign({}, TR.branches, mc ? { char: { name: mc.name, c: mc.c } } : null);
+    return { root: TR.root, nodes, branches };
+  }
+  const charMeta = (R, s) => metaVal('sp_' + R.charId + '_' + s);
 
   /* ---------------- elemental resonance ---------------- */
   const RES = {
@@ -86,25 +140,79 @@ G.progression = (function () {
       dmgBonus: m('ks_fire'), elBonus: {}, reactionBonus: 0, amplifyBonus: 0, shieldMul: 1, regen: 0, dmgReduction: m('ks_guard') ? 0.08 : 0,
       projSpeed: 1, extraProjectiles: m('multishot'), revival: ((G.save.data.meta || {}).revival || 0) > 0,
       // PROGRESSION extras (see header)
-      normalMul: 1, normalHaste: 1, bunnyMul: 3, bunnyCharges: 1, bunnyCdMul: 1, rainMul: 1.8, rainDur: 8,
+      normalMul: 1, normalHaste: 1, bunnyMul: 0.75, bunnyCharges: 1, bunnyCdMul: 1, rainMul: 1.8, rainDur: 8,
       extraArrows: 0, extraArrowMul: 0.6, burstBuff: false, shieldRange: 3, shieldDmg: 0.6,
       resonance: {}, offerCount: 3, constellation: 0,
     };
   }
 
+  /** kit stat keys are absolute values set by upgrades.js mods; when the upgrade is not owned the kit uses its lv0 default */
+  const KIT_DEF = { xqMul: 2.0, xqSkillMul: 2.6, xqBurstMul: 1.2, xqCdMul: 1, ngSkillMul: 2.3, ngGems: 7, cyMul: 2.4, cySkillMul: 3.0, cyBurstMul: 7.0, cyBurstN: 3, cyReach: 3.0 };
+  const kmul = (S, k, m) => { S[k] = (S[k] != null ? S[k] : KIT_DEF[k]) * m; };
+  const kadd = (S, k, a) => { S[k] = (S[k] != null ? S[k] : KIT_DEF[k]) + a; };
+  function applyCharStars(S, R) {
+    const n = charMeta(R, 'n'), s = charMeta(R, 's'), q = charMeta(R, 'q'), k = charMeta(R, 'k') > 0;
+    switch (R.charId) {
+      case 'amber':
+        S.normalDmg = (S.normalDmg || 0) + n; S.bunnyMul *= 1 + s; S.burstBonus = (S.burstBonus || 0) + q;
+        if (k) S.chargedPeriod *= 0.75; break;
+      case 'xingqiu':
+        if (n) kmul(S, 'xqMul', 1 + n); if (s) kmul(S, 'xqSkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
+        if (k) kmul(S, 'xqCdMul', 0.85); break;
+      case 'ningguang':
+        S.normalDmg = (S.normalDmg || 0) + n; if (s) kmul(S, 'ngSkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
+        if (k) kadd(S, 'ngGems', 3); break;
+      case 'chongyun':
+        if (n) kmul(S, 'cyMul', 1 + n); if (s) kmul(S, 'cySkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
+        if (k) kmul(S, 'cyReach', 1.15); break;
+    }
+  }
+  function applyConstellation(S, R) {
+    const c = constellationLevel(R.charId); S.constellation = c;
+    if (!c) return;
+    const b = R.buffs || {};
+    switch (R.charId) {
+      case 'amber':
+        if (c >= 1) S.extraArrows += 1;
+        if (c >= 2) S.bunnyMul *= 1.6;
+        if (c >= 3) S.bunnyMul *= 1.3;
+        if (c >= 4) { S.bunnyCdMul *= 0.8; S.bunnyCharges = 2; }
+        if (c >= 5) S.rainMul *= 1.3;
+        if (c >= 6) S.burstBuff = true;
+        break;
+      case 'xingqiu':
+        if (c >= 1) { S.xqRainN = 4; kmul(S, 'xqMul', 1.3); }
+        if (c >= 2) { S.burstDuration = (S.burstDuration || 0) + 3; S.elBonus.hydro = (S.elBonus.hydro || 0) + 0.15; }
+        if (c >= 3) kmul(S, 'xqSkillMul', 1.3);
+        if (c >= 4) S.xqC4 = 1.5;
+        if (c >= 5) kmul(S, 'xqBurstMul', 1.3);
+        if (c >= 6) { S.xqBurstExtra = 2; S.xqBurstEnergy = 3; }
+        break;
+      case 'ningguang':
+        if (c >= 1) S.ngC1 = 0.2;
+        if (c >= 2) S.ngC2 = true;
+        if (c >= 3) kmul(S, 'ngSkillMul', 1.3);
+        if (c >= 4) { S.ngSkillCdMul = 0.8; S.ngC4 = 0.15; }
+        if (c >= 5) S.ngBurstK = 1.3;
+        if (c >= 6 && b.ngC6Until > R.time) kadd(S, 'ngGems', 7);
+        break;
+      case 'chongyun':
+        if (c >= 1) S.cyC1 = 0.4;
+        if (c >= 2) S.cyC2 = 0.15;
+        if (c >= 3) kmul(S, 'cyBurstMul', 1.3);
+        if (c >= 4) S.cyC4 = 2;
+        if (c >= 5) kmul(S, 'cySkillMul', 1.3);
+        if (c >= 6) { kadd(S, 'cyBurstN', 1); kmul(S, 'cyBurstMul', 1.15); }
+        break;
+    }
+  }
+
   function computeStats(R) {
     const S = baseStats(R);
     for (const key in R.levels) { const up = G.upgrades[key], lv = R.levels[key]; if (up && up.mods && lv > 0) up.mods(S, lv, R); }
-    // constellations (Amber only)
-    if (R.charId === 'amber') {
-      const c = constellationLevel(); S.constellation = c;
-      if (c >= 1) S.extraArrows += 1;
-      if (c >= 2) S.bunnyMul *= 1.6;
-      if (c >= 3) S.bunnyMul *= 1.3;
-      if (c >= 4) { S.bunnyCdMul *= 0.8; S.bunnyCharges = 2; }
-      if (c >= 5) S.rainMul *= 1.3;
-      if (c >= 6) S.burstBuff = true;
-    }
+    // character stars (天賦の星図 top branch) + constellations — only the running character's own ones
+    applyCharStars(S, R);
+    applyConstellation(S, R);
     if (R.evolved && R.evolved.evo_amber_skill) S.bunnyCharges = Math.max(S.bunnyCharges, 2);
     S.resonance = resonanceSet(R); applyResonance(S, S.resonance);
     if (G.relics && G.relics.applyMods) { try { G.relics.applyMods(S, R); } catch (e) { console.error(e); } }
@@ -112,7 +220,7 @@ G.progression = (function () {
     if (b.feastUntil > R.time) S.atk *= 2;
     if (S.burstBuff && b.burstBuffUntil > R.time) { S.atk *= 1.15; S.speed *= 1.15; }
     // generous early game: bigger pickup radius (extra boost during the first 3 minutes)
-    S.pickup += 1.0 + (R.time < EARLY_T ? 1.2 : 0);
+    S.pickup += 0.25; // owner 2026-09-28: default pickup radius ≈ 1/3 of before (was +1.0, +1.2 early)
     S.critRate = Math.min(1, S.critRate);
     S.recharge = Math.min(3, S.recharge);
     return S;
@@ -145,6 +253,7 @@ G.progression = (function () {
     if (b) {
       if (b.feastUntil && b.feastUntil <= R.time) { b.feastUntil = 0; G.player.refreshStats(R); }
       if (b.burstBuffUntil && b.burstBuffUntil <= R.time) { b.burstBuffUntil = 0; G.player.refreshStats(R); }
+      if (b.ngC6Until && b.ngC6Until <= R.time) { b.ngC6Until = 0; G.player.refreshStats(R); }
     }
     if (!R.earlyDone && R.time >= EARLY_T) { R.earlyDone = true; G.player.refreshStats(R); }
     shieldAura(R, dt);
@@ -490,6 +599,19 @@ G.progression = (function () {
     const R = G.run; if (!R || !R.stats || !R.stats.burstBuff) return;
     R.buffs = R.buffs || {}; R.buffs.burstBuffUntil = R.time + 10; G.player.refreshStats(R);
   });
+  // 凝光 C6: 10 s of +7 pebbles after 天権崩玉
+  G.bus.on('burst', id => {
+    const R = G.run; if (!R || R.charId !== 'ningguang' || !R.stats || constellationLevel('ningguang') < 6) return;
+    R.buffs = R.buffs || {}; R.buffs.ngC6Until = R.time + 10; G.player.refreshStats(R);
+    G.bus.emit('notice', { text: '天権の威光！ 石粒 +7粒', color: '#ffe07a' });
+  });
+  // 重雲 C4: hitting an enemy that carries cryo (or is frozen) restores energy, once per 1.5 s
+  G.bus.on('enemyHit', h => {
+    const R = G.run; if (!R || R.charId !== 'chongyun' || !R.stats || !R.stats.cyC4 || !h || !h.enemy) return;
+    const e = h.enemy, cryo = (e.aura && e.aura.el === 'cryo') || e.frozenUntil > R.time || h.element === 'cryo';
+    if (!cryo || R.time - (R.cyC4T || -9) < 1.5) return;
+    R.cyC4T = R.time; G.player.addEnergy(R, R.stats.cyC4);
+  });
   G.bus.on('reaction', () => {
     const R = G.run; if (!R || !R.stats || !R.stats.resonance || !R.stats.resonance.electro) return;
     if (R.time - (R.elecResT || -9) < 0.6) return;
@@ -498,7 +620,7 @@ G.progression = (function () {
 
   const api = {
     computeStats, initRun, addXp, update, available, makeOffer, reroll, apply, openLevelUp, openChest, evoReady, rollChest, resolveChoice, newLaunchers,
-    def, resonance: RES, constellations: CONST, constellationLevel, checkResonance, checkEvoReady, blessingPool, metaVal, shieldAuraByCombat: false,
+    def, resonance: RES, constellations: CONST, constellationsOf, constellationLevel, setConstellation, metaDef, metaTree, applyCharStars, applyConstellation, checkResonance, checkEvoReady, blessingPool, metaVal, shieldAuraByCombat: false,
   };
   return api;
 })();

@@ -70,7 +70,7 @@
   }
 
   /* ============================ PYRO 人形爆弾 ============================ */
-  function pyroMul(lv) { return 5 + 1.6 * (lv - 1); }
+  function pyroMul(lv) { return 0.5 + 1.6 * (lv - 1); }   // owner: lv1 = 50% ATK, +160%/lv as before
   function plantBomb(R, x, y, o) {
     const fuse = o.fuse || 0.65;
     R.props.push({ x, y, t: 0, bounce: 1,
@@ -152,14 +152,14 @@
     const S = R.stats, evo = !!R.evolved.evo_launcher_hydro;
     const r = (3.2 + 0.3 * (lv - 1)) * (S.areaMul || 1) * (evo ? 1.3 : 1);
     const life = (5.3 + 0.4 * (lv - 1)) * (S.durationMul || 1) + (evo ? 2.5 : 0);
-    const mul = 1.0 + 0.3 * (lv - 1);
+    const mul = 0.1 + 0.3 * (lv - 1);   // owner: lv1 = 10% ATK per tick, +30%/lv as before
     // shatter
     G.audio.sfx('hydro', { x, y });
     G.fx.ring && G.fx.ring(x, y, r, '#9fd6ff');
     wave(R, x, y, r, '#3fa9ff', 0.4, 0.25);
     const n = reduced() ? 8 : 22;
     for (let i = 0; i < n; i++) { const a = U.rand(0, U.TAU), s = U.rand(2, 7); G.fx.particle({ x, y: y - 0.3, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6 - U.rand(2, 5), life: U.rand(0.4, 0.8), size: U.rand(0.07, 0.16), color: i % 4 === 0 ? '#ffffff' : '#7cc4ff', glow: true, grav: 12, drag: 1.2 }); }
-    G.combat.aoe(R, x, y, r * 0.8, { mul: mul * 2.4, element: 'hydro', gauge: 1, src: 'launcher_hydro', knock: 0.9 });
+    G.combat.aoe(R, x, y, r * 0.8, { mul: mul, element: 'hydro', gauge: 1, src: 'launcher_hydro', knock: 0.9 });
     const drops = [];
     for (let i = 0; i < 6; i++) drops.push({ a: U.rand(0, U.TAU), d: U.rand(0.1, 0.85), ph: U.rand(0, 3) });
     W.field(R, { x, y, r, life, tick: evo ? 0.45 : 0.7, next: 0.45, evo, drops, retarget: 0,
@@ -291,7 +291,7 @@
   };
 
   /* ============================ ELECTRO 連鎖雷 ============================ */
-  function electroMul(lv) { return 2.8 + 0.8 * (lv - 1); }
+  function electroMul(lv) { return 0.3 + 0.8 * (lv - 1); }   // owner: lv1 = 30% ATK, +80%/lv as before
   function chainStrike(R, first, jumps, mul, src) {
     const hit = [first.id];
     // sky strike on the first target

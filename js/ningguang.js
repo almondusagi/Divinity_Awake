@@ -126,6 +126,7 @@
     else {
       if (!reduced() || U.chance(0.3)) G.fx.hitSpark(e.x, e.y - 0.7, 'geo', g.boost > 1);
       if (g.big) evoShard(R, g, e);
+      else if (R.stats.ngC1) c1Shard(R, g, e);
       if (R.realTime - lastSfx > 0.05) { lastSfx = R.realTime; G.audio.sfx('arrowHit', { x: e.x, y: e.y, pitch: 1.7, vol: 0.45 }); }
     }
     if (g.pierce-- <= 0) { g.dead = true; return true; }
@@ -133,6 +134,11 @@
   function evoShard(R, g, e) {
     G.combat.aoe(R, e.x, e.y, 1.15, { mul: g.mul * 0.45, element: 'geo', gauge: 0, src: 'evo_ng_normal', knock: 0.4, exclude: e, quiet: true });
     if (!reduced() && U.chance(0.5)) G.fx.burst(e.x, e.y - 0.5, 5, GO, { max: 5, life: 0.35, size: 0.1, grav: 12, up: 3 });
+  }
+  /** C1 (constellation): every pebble hit splashes a small geo blast */
+  function c1Shard(R, g, e) {
+    G.combat.aoe(R, e.x, e.y, 0.9, { mul: g.mul * g.boost * R.stats.ngC1, element: 'geo', gauge: 0, src: 'ng_normal', knock: 0.3, exclude: e, quiet: true });
+    if (!reduced() && U.chance(0.35)) G.fx.burst(e.x, e.y - 0.5, 4, GOL, { max: 4, life: 0.3, size: 0.09, grav: 12, up: 3 });
   }
   function burstHit(R, g, e) {
     if (R.realTime - lastBig > 0.035) {
@@ -283,7 +289,7 @@
       while (Ws.ngQ > 0 && Ws.ngEmit <= 0) { Ws.ngEmit += gap; Ws.ngQ--; emitGem(R, Ws); }
     }
     Ws.ngT -= dt;
-    if (Ws.ngT <= 0) Ws.ngT = startVolley(R, Ws) ? volleyInterval(R) : 0.1;
+    if (Ws.ngT <= 0) Ws.ngT = (!R.atkOff && startVolley(R, Ws)) ? volleyInterval(R) : 0.1;
     if (evo(R)) {
       Ws.ngRain -= dt;
       if (Ws.ngRain <= 0) { Ws.ngRain = 5 / Math.max(0.5, Math.sqrt(R.stats.haste || 1)); gemRain(R); }
@@ -307,7 +313,7 @@
 
   /* ============================ SKILL: 璇璣屏 ============================ */
   const SKILL_CD = 12, WALL_LIFE = 10;
-  function skillCdBase(R) { return SKILL_CD * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
+  function skillCdBase(R) { return SKILL_CD * st(R, 'ngSkillCdMul', 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
   function skillMul(R) { return st(R, 'ngSkillMul', 2.3); }
   let lastBlockSfx = 0;
   function onBlock(R, b, h) {
@@ -324,6 +330,11 @@
   function segDist(b, x, y) { const dx = x - b.x, dy = y - b.y, a = U.clamp(dx * b.ux + dy * b.uy, -b.half, b.half); return Math.hypot(dx - a * b.ux, dy - a * b.uy); }
   function shatter(R, b) {
     if (b.broke) return; b.broke = true; b.dead = true; b.endT = R.time;
+    if (R.stats.ngC2) { // C2: the screen bursts into a geo blast when it breaks
+      G.combat.aoe(R, b.x, b.y, b.half + 2.2, { mul: skillMul(R), element: 'geo', gauge: 1, src: 'ng_skill', knock: 1.6, filter: e => segDist(b, e.x, e.y) <= 2.2 + e.r });
+      G.fx.shake(0.35); G.fx.ring && G.fx.ring(b.x, b.y, b.half + 1.2, GOL);
+      if (G.fx.boom) G.fx.boom(b.x, b.y, 1.8, { color: GO, kind: 'geo' });
+    }
     G.audio.sfx('rockImpact', { x: b.x, y: b.y, vol: 0.7, pitch: 0.9 });
     if (!reduced()) for (let i = 0; i < 26; i++) {
       const a = U.rand(-b.half, b.half), h = U.rand(0.2, 3.2);
@@ -356,7 +367,10 @@
   }
   function wallUpdate(R, dt, o) {
     const b = o.b;
-    if (!b.broke && R.time >= b.until) shatter(R, b);
+    if (!b.broke && R.time >= b.until) {
+      shatter(R, b);
+      if (R.stats.ngC2 && R.player) { R.player.skillCd = 0; G.fx.reactionText && G.fx.reactionText(R.player.x, R.player.y - 2.6, '璇璣屏 リセット！', GOL); } // C2
+    }
     if (b.broke && R.time - b.endT > 0.4) return false;
   }
   /* drawn as a golden FOLDING screen (屏風): k panels zig-zagging along the wall line, each panel textured with one
@@ -403,7 +417,7 @@
   function castBurst(R) {
     const p = R.player, S = R.stats, lv = st(R, 'ngBurstLv', 0);
     const volleys = 1 + (lv >= 2 ? 1 : 0) + (lv >= 4 ? 1 : 0), sizeK = 1 + 0.18 * ((lv >= 1 ? 1 : 0) + (lv >= 3 ? 1 : 0));
-    const n = gemCount(R), mul = gemMul(R) * 10 * (1 + (S.burstBonus || 0));
+    const n = gemCount(R), mul = gemMul(R) * 10 * st(R, 'ngBurstK', 1) * (1 + (S.burstBonus || 0));
     spr();
     G.player.pose(R, 'burst', 0.6, p.face);
     G.fx.zoomPunch && G.fx.zoomPunch(0.08); G.fx.flash && G.fx.flash(GOL, 0.35);
@@ -474,6 +488,14 @@
     } });
   }
 
+  /** C4 (constellation, R.stats.ngC4): damage taken -15 % while a jade screen stands. Re-applied on top of computeStats. */
+  function updateGuard(R) {
+    const Ws = R.wstate, S = R.stats; if (!S.ngC4 && !Ws.ngGuard) return;
+    if (Ws.ngStatsRef !== S) { Ws.ngStatsRef = S; Ws.ngBaseDR = S.dmgReduction || 0; }
+    const b = Ws.ngWallB, on = !!(S.ngC4 && b && !b.broke && R.time < b.until);
+    Ws.ngGuard = on;
+    S.dmgReduction = on ? 1 - (1 - Ws.ngBaseDR) * (1 - S.ngC4) : Ws.ngBaseDR;
+  }
   G.bus.on('runStart', () => { clearAll(); });
 
   /* ============================ KIT ============================ */
@@ -483,6 +505,7 @@
       G.barrier.prune(R);
       updateNormal(R, dt);
       updateGems(R, dt);
+      updateGuard(R);
     },
     skill(R) { castSkill(R); },
     skillCd(R) { return skillCdBase(R); },

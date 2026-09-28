@@ -284,6 +284,15 @@
     W.fire(R, { x: p.x + fx * r * 0.6, y: p.y + fy * r * 0.6, vx: fx * sp, vy: fy * sp, life: 0.6, r: 0.9, mul: swingMul(R) * 0.6, element: 'cryo', gauge: 0.5,
       src: 'evo_cy_normal', pierce: 6, knock: 0.8, size: 2.6, update: waveUpdate, draw: waveDraw });
   }
+  /** C1 (constellation, R.stats.cyC1 = ×ATK ratio of one sweep): 3 piercing ice blades in a small fan */
+  function c1Blades(R, fx, fy) {
+    const p = R.player, r = reach(R), sp = 13 * (R.stats.projSpeed || 1), a0 = Math.atan2(fy, fx), mul = swingMul(R) * R.stats.cyC1;
+    for (let i = -1; i <= 1; i++) {
+      const a = a0 + i * 0.32, dx = Math.cos(a), dy = Math.sin(a);
+      W.fire(R, { x: p.x + dx * r * 0.5, y: p.y + dy * r * 0.5, vx: dx * sp, vy: dy * sp, life: 0.55, r: 0.7, mul, element: 'cryo', gauge: 0.5,
+        src: 'cy_normal', pierce: 4, knock: 0.6, size: 1.9, update: waveUpdate, draw: waveDraw });
+    }
+  }
   function spikeDraw(ctx, f) {
     const k = f.t / f.life, up = U.ease.outBack(Math.min(1, f.t / 0.14)), a = k > 0.7 ? (1 - k) / 0.3 : 1, s = f.s;
     ctx.globalAlpha = a; ctx.drawImage(SPR.spikes, f.x - s * 0.4, f.y - s * up + 0.1, s * 0.8, s * up);
@@ -313,7 +322,7 @@
     if (Ws.cyIdx < 0) {
       Ws.cyT -= dt;
       if (Ws.cyT > 0) return;
-      if (!aim(R, Ws)) { Ws.cyT = 0.08; return; }
+      if (R.atkOff || !aim(R, Ws)) { Ws.cyT = 0.08; return; }
       Ws.cyIdx = 0; Ws.cyN = chainLen(R);
       Ws.cyNext = 0.17;                                               // wind-up: the raised-sword frame
       G.player.pose(R, 'attack', Ws.cyNext + 0.25, { x: Ws.cyDx, y: Ws.cyDy });
@@ -324,6 +333,7 @@
     if (Ws.cyNext > 0) return;
     const i = Ws.cyIdx, N = Ws.cyN, last = i === N - 1, slam = last && N >= 3;
     strike(R, Ws, i, last, slam);
+    if (last && R.stats.cyC1) c1Blades(R, Ws.cyDx, Ws.cyDy); // C1: the finishing swing throws 3 ice blades
     if (last) { Ws.cyIdx = -1; Ws.cyT = restTime(R); return; }
     // next swing of the chain: re-aim (keeps chasing the crowd), wind-up again
     Ws.cyIdx = i + 1;
@@ -408,11 +418,12 @@
   /** frost field buff: attack speed re-applied on top of computeStats (survives refreshStats) + infusion flag */
   function updateField(R) {
     const Ws = R.wstate, S = R.stats, f = Ws.cyField;
-    if (Ws.cyStatsRef !== S) { Ws.cyStatsRef = S; Ws.cyBaseHaste = S.haste; }
+    if (Ws.cyStatsRef !== S) { Ws.cyStatsRef = S; Ws.cyBaseHaste = S.haste; Ws.cyBaseCdr = S.cdr || 0; }
     const inside = !!(f && !f.kill && f.t < f.life && f.inside);
     if (inside && !Ws.cyIn) { const p = R.player; G.fx.ring && G.fx.ring(p.x, p.y, 1.2, CY); }
     Ws.cyIn = inside;
     S.haste = Ws.cyBaseHaste + (inside ? st(R, 'cyHaste', 0.15) : 0);
+    S.cdr = Ws.cyBaseCdr + (inside && S.cyC2 ? S.cyC2 : 0); // C2 (constellation): cooldowns -15 % inside the field
   }
   /** frost glow around Chongyun while his sweeps are infused */
   function auraUpdate(R, dt, o) { if (R.charId !== 'chongyun') return false; o.x = R.player.x; o.y = R.player.y - 0.03; }

@@ -81,7 +81,7 @@ G.debugPanel = (function () {
       if (c.meta === 'max') for (const k in G.data.meta) M[k] = G.data.meta[k].max;
       S.meta = M;
       const con = (S.constellation && typeof S.constellation === 'object') ? Object.assign({}, S.constellation) : {};
-      con.amber = c.meta === 'max' ? 6 : 0; S.constellation = con;
+      con[c.char || 'amber'] = c.meta === 'max' ? 6 : 0; S.constellation = con; // per-character constellations
     }
     if (st.full || st.meta) ls.set(K_RESTORE, JSON.stringify(st));
     G.startRun(c.char, c.stage || 'mondstadt');
