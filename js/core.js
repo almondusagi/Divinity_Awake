@@ -144,6 +144,9 @@ G.assets = (function () {
     xingqiu: { cols: 8, cell: 160 }, ningguang: { cols: 8, cell: 160 }, chongyun: { cols: 8, cell: 160 },
     // stage bosses (v5 stages, tools/build_stages.py): idle2, walk2, attack2
     zhongli: { cols: 6, cell: 160 }, raiden: { cols: 6, cell: 160 }, nahida: { cols: 6, cell: 160 },
+    // stage 2-4 grunts & mid-bosses (owner pack, tools/build_stages.py)
+    liyue_spearman: { cols: 6, cell: 160 }, inazuma_ronin: { cols: 6, cell: 160 }, sumeru_mercenary: { cols: 6, cell: 160 },
+    rock_drake: { cols: 6, cell: 160 }, storm_sentinel: { cols: 6, cell: 160 }, mushroom_beast: { cols: 6, cell: 160 },
   };
   const list = [];
   for (const a in actors) list.push(['actor_' + a, 'assets/actor_' + a + '.webp']);
@@ -158,6 +161,7 @@ G.assets = (function () {
     ['title_bg', 'assets/title_bg.webp'], ['floor', 'assets/floor.webp']);
   // v5 stages (owner: STAGE): boss icons, stage floors, stage landscapes (UI stage select / intro)
   ['zhongli', 'raiden', 'nahida'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
+  ['fx_meteor', 'fx_rock_pillar', 'fx_lightning_slash', 'fx_dendro_burst', 'fx_dream_pattern'].forEach(n => list.push([n, 'assets/' + n + '.webp']));
   ['liyue', 'inazuma', 'sumeru'].forEach(n => list.push(['floor_' + n, 'assets/floor_' + n + '.webp'], ['bg_' + n, 'assets/bg_' + n + '.webp'], ['bg_' + n + '_small', 'assets/bg_' + n + '_small.webp']));
 
   function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }

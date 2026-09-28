@@ -41,10 +41,12 @@ G.unlocks = (function () {
     return !d.requires || isCleared(d.requires);
   }
   function stageName(id) { return stage(id).name; }
+  /** name for display: a stage that is not open yet stays 「？？？」 (owner rule: secrets keep their names hidden) */
+  function shownName(id) { return stageOpen(id) || isCleared(id) ? stageName(id) : '？？？'; }
   function stageCond(id) {
     const d = stage(id);
-    if (!d.implemented) return 'じゅんびちゅう';
-    return d.requires ? stageName(d.requires) + ' をクリアで解放' : '';
+    if (!d.implemented) return '準備中';
+    return d.requires ? shownName(d.requires) + ' をクリアで解放' : '';
   }
   function rec(id) {
     const s = S(); if (!s.stageRec || typeof s.stageRec !== 'object') s.stageRec = {};
@@ -64,7 +66,7 @@ G.unlocks = (function () {
   function conds(id) {
     const c = def(id); if (!c || !c.unlock) return [];
     const out = [];
-    if (c.unlock.stage) out.push({ kind: 'stage', text: stageName(c.unlock.stage) + 'をクリア', ok: isCleared(c.unlock.stage) });
+    if (c.unlock.stage) out.push({ kind: 'stage', text: shownName(c.unlock.stage) + 'をクリア', ok: isCleared(c.unlock.stage) });
     if (c.unlock.mora) out.push({ kind: 'mora', text: U.fmtNum(c.unlock.mora) + 'モラ', ok: (S().mora || 0) >= c.unlock.mora, cost: c.unlock.mora });
     return out;
   }
@@ -112,5 +114,5 @@ G.unlocks = (function () {
     return { stages: st, chars: ch };
   }
 
-  return { charState, buy, condText, conds, cost, setChar, setCleared, isCleared, stage, stageList, stageOpen, stageName, stageCond, rec, newlyUnlocked, migrate };
+  return { charState, buy, condText, conds, cost, setChar, setCleared, isCleared, stage, stageList, stageOpen, stageName, shownName, stageCond, rec, newlyUnlocked, migrate };
 })();

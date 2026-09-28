@@ -20,7 +20,7 @@ G.upgrades = {};
 
   add('amber_normal', {
     name: '炎の矢', icon: 'amber_arrow', cat: 'char', char: 'amber', el: 'pyro', max: 5, rarity: 4, short: '矢の威力＆連射',
-    desc: lv => `矢の威力 ${pct(NORMAL[lv - 1])}→<b>${pct(NORMAL[lv])}</b>\n連射スピード +${lv * 8}%`,
+    desc: lv => `矢の威力 ${pct(NORMAL[lv - 1])}→<b>${pct(NORMAL[lv])}</b>\n連射速度 +${lv * 8}%`,
     unlock: () => true,
     mods(S, lv) { S.normalMul = NORMAL[lv]; S.normalHaste = 1 + 0.08 * lv; },
   });
@@ -73,10 +73,10 @@ G.upgrades = {};
   // Key kept as 'xq_feather' because it is also the partner material of 行秋's evolution.
   XQ('xq_feather', { name: '雷鳥の羽', icon: 'feather', badge: '羽', hudIcon: 'feather', el: 'electro', max: 10, cat: 'stat', char: null, rarity: 4,
     short: '通常攻撃のクールタイム -5%',
-    desc: lv => `通常攻撃の待ち時間 -5%\n合計 <b>-${lv * 5}%</b>` + (lv === 10 ? '（MAX）' : ''), unlock: () => true,
+    desc: lv => `通常攻撃のクールタイム -5%\n合計 <b>-${lv * 5}%</b>` + (lv === 10 ? '（MAX）' : ''), unlock: () => true,
     mods(S, lv) { S.featherCd = 1 - 0.05 * lv; S.xqCdMul = S.featherCd; } });
   XQ('xq_skill', { name: '画雨籠山', badge: 'F', hudIcon: 'xq_skill', max: 5, short: '水の2連斬り＋雨すだれ',
-    desc: lv => `斬撃 ${pct(XQ_SKILL[lv - 1])}→<b>${pct(XQ_SKILL[lv])}</b>\n雨すだれの剣 被ダメ <b>-${Math.round(XQ_DR[lv] * 100)}%</b>`, unlock: R => R.time >= 30,
+    desc: lv => `斬撃 ${pct(XQ_SKILL[lv - 1])}→<b>${pct(XQ_SKILL[lv])}</b>\n雨すだれの剣 受けるダメージ <b>-${Math.round(XQ_DR[lv] * 100)}%</b>`, unlock: R => R.time >= 30,
     mods(S, lv) { S.xqSkillMul = XQ_SKILL[lv]; S.xqRainDR = XQ_DR[lv]; } });
   XQ('xq_burst', { name: '裁雨留虹', badge: 'Q', hudIcon: 'xq_burst', max: 5, short: '五月雨斬りを強化',
     desc: lv => `1本 ${pct(XQ_BURST[lv - 1])}→<b>${pct(XQ_BURST[lv])}</b>\n降る時間 <b>${XQ_BDUR[lv]}秒</b>` + (lv % 2 === 0 ? '・剣の数+1' : ''), unlock: R => R.time >= 75,
@@ -92,7 +92,7 @@ G.upgrades = {};
   NG('ng_power', { name: '石粒の威力', badge: '威', hudIcon: 'ng_gem', max: 5, short: '石粒のダメージUP',
     desc: lv => `1粒の威力 ${pct(NG_MUL[lv - 1])}→<b>${pct(NG_MUL[lv])}</b>`, unlock: () => true, mods(S, lv) { S.ngMul = NG_MUL[lv]; } });
   NG('ng_skill', { name: '璇璣屏', badge: 'F', hudIcon: 'ng_skill', max: 5, short: '屏風を強化',
-    desc: lv => `屏風のダメージ ${pct(NG_SKILL[lv - 1])}→<b>${pct(NG_SKILL[lv])}</b>\n屏風の長さ <b>${NG_WALL[lv]}</b>`, unlock: R => R.time >= 30,
+    desc: lv => `屏風の威力 ${pct(NG_SKILL[lv - 1])}→<b>${pct(NG_SKILL[lv])}</b>\n屏風の長さ <b>${NG_WALL[lv]}</b>`, unlock: R => R.time >= 30,
     mods(S, lv) { S.ngSkillMul = NG_SKILL[lv]; S.ngWall = NG_WALL[lv]; } });
   NG('ng_burst', { name: '天権崩玉', badge: 'Q', hudIcon: 'ng_burst', max: 5, short: '一斉発射を強化',
     desc: lv => ['', '宝石が もっと大きくなる', '一斉発射 <b>2回</b> になる', '宝石が もっと大きくなる', '一斉発射 <b>3回</b> になる', '当たると <b>岩が爆発</b>する'][lv] + '\n（威力は石粒の10倍）',
@@ -111,7 +111,7 @@ G.upgrades = {};
     desc: lv => `とどく距離 ${CY_REACH[lv - 1]}→<b>${CY_REACH[lv]}</b>\n扇の広さ <b>${CY_ARC[lv] * 2}°</b>`, unlock: () => true,
     mods(S, lv) { S.cyReach = CY_REACH[lv]; S.cyArc = CY_ARC[lv]; } });
   CYU('cy_combo', { name: '連撃', badge: '連', hudIcon: 'cy_combo', max: 3, short: '1回で何度も振る',
-    desc: lv => `1回に振る数 +1\n合計 <b>${CY_COMBO[lv]}連撃</b>` + (lv >= 2 ? '\n最後は まわり全部を たたきつけ！' : ''), unlock: () => true,
+    desc: lv => `1回に振る数 +1\n合計 <b>${CY_COMBO[lv]}連撃</b>` + (lv >= 2 ? '\n最後は まわりすべてを たたきつけ！' : ''), unlock: () => true,
     mods(S, lv) { S.cyCombo = CY_COMBO[lv]; } });
   CYU('cy_skill', { name: '重華積霜', badge: 'F', hudIcon: 'cy_skill', max: 5, short: '氷の衝撃＋霜の領域',
     desc: lv => `衝撃 ${pct(CY_SKILL[lv - 1])}→<b>${pct(CY_SKILL[lv])}</b>\n領域の中で攻撃速度 <b>+${Math.round(CY_HASTE[lv] * 100)}%</b>`, unlock: R => R.time >= 30,
@@ -135,7 +135,7 @@ G.upgrades = {};
   L('anemo', { name: '風型ランチャー', icon: 'wind', short: '敵を吸い込むつむじ風', unlock: R => R.time >= 140,
     desc: lv => lv === 1 ? `敵を吸い込むかぜおこし\n拡散で元素を広げる！` : `威力 ${pct(AN[lv - 2])}→<b>${pct(AN[lv - 1])}</b>\n半径 <b>${ANR[lv - 1]}</b>` });
   L('cryo', { name: '氷型ランチャー', icon: 'snow', short: '全体に氷を付着', unlock: R => R.time >= 180,
-    desc: lv => lv === 1 ? `雪を降らせて全部の敵に氷付着\n溶解・凍結のチャンス！` : `雪の時間 ${(1 + 0.15 * (lv - 2)).toFixed(2)}秒→<b>${(1 + 0.15 * (lv - 1)).toFixed(2)}秒</b>` });
+    desc: lv => lv === 1 ? `雪を降らせて すべての敵に氷付着\n溶解・凍結のチャンス！` : `雪の時間 ${(1 + 0.15 * (lv - 2)).toFixed(2)}秒→<b>${(1 + 0.15 * (lv - 1)).toFixed(2)}秒</b>` });
   const GE = [3.2, 4.16, 5.12, 6.08, 7.04], GEN = [2, 2, 3, 3, 4];
   L('geo', { name: '岩型ランチャー', icon: 'rock', short: '岩の造形物＋シールド', unlock: R => R.time >= 220,
     desc: lv => lv === 1 ? `岩の造形物を落として衝撃波\n威力 <b>${pct(GE[0])}</b>` : `落下威力 ${pct(GE[lv - 2])}→<b>${pct(GE[lv - 1])}</b>\n設置数 <b>${GEN[lv - 1]}</b>` });
@@ -160,15 +160,15 @@ G.upgrades = {};
   /* ================= stats (★3) ================= */
   const ST = (k, o) => add(k, Object.assign({ cat: 'stat', rarity: 3 }, o));
   const tot = (label, per, lv, unit) => `${label} ${unit === '%' ? '+' + Math.round(per * 100) + '%' : '+' + per + (unit || '')}\n合計 <b>${unit === '%' ? '+' + Math.round(per * lv * 100) + '%' : '+' + Math.round(per * lv * 10) / 10 + (unit || '')}</b>`;
-  ST('attack', { name: '攻撃力', icon: 'amber_arrow', glyph: 'atk', max: 5, short: '全部のダメージUP',
+  ST('attack', { name: '攻撃力', icon: 'amber_arrow', glyph: 'atk', max: 5, short: 'すべてのダメージUP',
     desc: lv => tot('攻撃力', 0.15, lv, '%'), unlock: () => true, mods(S, lv) { S.atk *= 1 + 0.15 * lv; } });
   ST('hp', { name: '最大HP', icon: 'chicken', glyph: 'hp', max: 5, short: 'たおれにくくなる',
     desc: lv => tot('最大HP', 0.15, lv, '%') + '\nHPも少し回復', unlock: () => true,
     mods(S, lv) { S.maxHp *= 1 + 0.15 * lv; }, onGain(R) { G.player.heal(R, R.player.maxHp * 0.15); } });
   ST('defense', { name: '防御力', icon: 'crystal', glyph: 'def', max: 5, short: '受けるダメージDOWN',
-    desc: lv => tot('防御力', 15, lv, '') + `\n（被ダメ -${Math.round((1 - 100 / (100 + 15 * lv)) * 100)}%）`, unlock: () => true,
+    desc: lv => tot('防御力', 15, lv, '') + `\n（受けるダメージ -${Math.round((1 - 100 / (100 + 15 * lv)) * 100)}%）`, unlock: () => true,
     mods(S, lv) { S.def += 15 * lv; } });
-  ST('speed', { name: '移動速度', icon: 'wind', glyph: 'speed', max: 5, short: 'はやく走れる',
+  ST('speed', { name: '移動速度', icon: 'wind', glyph: 'speed', max: 5, short: '速く走れる',
     desc: lv => tot('移動速度', 0.05, lv, '%'), unlock: () => true, mods(S, lv) { S.speed *= 1 + 0.05 * lv; } });
   ST('harvest', { name: '回収範囲', icon: 'mora', glyph: 'magnet', max: 5, short: '粒子を遠くから吸い寄せ',
     desc: lv => `回収範囲 +0.8・経験値 +6%\n合計 <b>+${(0.8 * lv).toFixed(1)}・経験値+${6 * lv}%</b>`, unlock: () => true,
@@ -176,7 +176,7 @@ G.upgrades = {};
   ST('haste', { name: '攻撃速度', icon: 'amber_arrow', glyph: 'haste', max: 8, short: '矢もランチャーも速く',
     desc: lv => tot('攻撃速度', 0.08, lv, '%'), unlock: R => R.time >= 45, mods(S, lv) { S.haste += 0.08 * lv; } });
   ST('recharge', { name: '元素チャージ効率', icon: 'rain', glyph: 'er', max: 5, short: '元素爆発をもっと撃てる',
-    desc: lv => tot('チャージ効率', 0.12, lv, '%'), unlock: R => R.time >= 60, mods(S, lv) { S.recharge += 0.12 * lv; } });
+    desc: lv => tot('元素チャージ効率', 0.12, lv, '%'), unlock: R => R.time >= 60, mods(S, lv) { S.recharge += 0.12 * lv; } });
   ST('crit_rate', { name: '会心率', icon: 'vfx_status', glyph: 'cr', max: 5, short: '会心が出やすく',
     desc: lv => tot('会心率', 0.05, lv, '%'), unlock: R => R.time >= 60, mods(S, lv) { S.critRate += 0.05 * lv; } });
   ST('crit_damage', { name: '会心ダメージ', icon: 'vfx_status', glyph: 'cd', max: 5, short: '会心の数字がデカく',
@@ -239,7 +239,7 @@ G.upgrades = {};
   BL('bless_firework', { name: '祝福の花火', icon: 'bomb', glyph: 'boom', short: 'レベルアップで花火！', el: 'pyro',
     desc: () => 'レベルアップするたびに\nまわりで <b>花火が大爆発</b>（900%）\n経験値 <b>+15%</b>', mods(S) { S.xpMul *= 1.15; } });
   BL('bless_dandelion', { name: '蒲公英の風', icon: 'wind', glyph: 'speed', short: '40体ごとに大旋風', el: 'anemo',
-    desc: () => '敵を <b>40体</b> 倒すごとに\n大旋風で吹き飛ばし\n経験値を <b>全部吸い寄せる</b>' });
+    desc: () => '敵を <b>40体</b> 倒すごとに\n大旋風で吹き飛ばし\n経験値を <b>すべて吸い寄せる</b>' });
   BL('bless_favonius', { name: '西風の加護', icon: 'vfx_status', glyph: 'cr', short: '会心でエネルギー', el: 'anemo',
     desc: () => '会心率 <b>+12%</b>\n会心が出ると ときどき\n元素エネルギーが出る', mods(S) { S.critRate += 0.12; } });
   BL('bless_mora', { name: '黄金の夢', icon: 'mora', glyph: 'mora', short: 'モラざくざく',
@@ -248,13 +248,17 @@ G.upgrades = {};
     desc: () => 'ウサギ伯爵のクールタイム <b>-30%</b>\n元素チャージ効率 <b>+40%</b>', mods(S) { S.bunnyCdMul *= 0.7; S.recharge += 0.4; } });
   G.blessings = ['bless_meteor', 'bless_firework', 'bless_dandelion', 'bless_favonius', 'bless_mora', 'bless_scout'];
 
+  /** evolution name for hints — 「？？？」 until the player achieved it once (スキルブック) */
+  const evoLabel = key => (G.skillbook ? G.skillbook.evoLabel(key) : (G.upgrades[key] || {}).name || '？？？');
+  const evoText = key => '条件を満たすと「' + evoLabel(key) + '」へ進化可能';
   G.upgradeHelpers = {
+    evoLabel, evoText,
     /** requirement keys of an evolution (recipe object or evo key) */
     evoReqs(e) { if (typeof e === 'string') e = G.evolutions.find(x => x.key === e); return e ? e.requires : []; },
     /** recipes (for this run's character) that use `key` as a requirement */
     evoRecipesOf(R, key) { return G.evolutions.filter(e => e.requires.indexOf(key) >= 0 && (!G.upgrades[e.key].char || !R || G.upgrades[e.key].char === R.charId)); },
     /** short recipe text: 「炎の矢・追加射撃…をぜんぶMAX」 */
-    evoRecipeText(e) { if (typeof e === 'string') e = G.evolutions.find(x => x.key === e); return e ? e.requires.map(k => G.upgrades[k].name).join('＋') + ' をぜんぶMAX' : ''; },
+    evoRecipeText(e) { if (typeof e === 'string') e = G.evolutions.find(x => x.key === e); return e ? e.requires.map(k => G.upgrades[k].name).join('＋') + ' をすべてMAX' : ''; },
     /** hint for a card: {text, evoKey, have} or null. have = another requirement of that recipe is already owned */
     evoHint(R, key) {
       for (const e of G.evolutions) {
@@ -263,8 +267,9 @@ G.upgrades = {};
         if (up.char && R && up.char !== R.charId) continue;
         if (e.requires.indexOf(key) < 0) continue;
         const others = e.requires.filter(k => k !== key);
-        const text = others.length > 1 ? '進化素材: ' + e.requires.length + 'つ全部MAXで「' + up.name + '」' : '進化素材: ' + G.upgrades[others[0]].name + 'もMAXで「' + up.name + '」';
-        return { text, evo: up.name, key: e.key, have: others.some(k => lvOf(R, k) > 0), left: evoLeft(R, e) };
+        // one wording for every evolution hint (owner rule); the name stays 「？？？」 until that evolution was achieved once
+        const text = evoText(e.key);
+        return { text, evo: evoLabel(e.key), key: e.key, have: others.some(k => lvOf(R, k) > 0), left: evoLeft(R, e) };
       }
       return null;
     },
@@ -281,7 +286,7 @@ G.upgrades = {};
         const up = G.upgrades[e.key]; if (up.char && up.char !== R.charId) continue;
         const before = evoLeft(R, e), after = evoLeft(R, e, key);
         if (after >= before) continue; // this pick does not advance the recipe
-        const r = after === 0 ? { unlock: true, evo: up.name, key: e.key } : { left: after, evo: up.name, key: e.key };
+        const r = after === 0 ? { unlock: true, evo: evoLabel(e.key), key: e.key } : { left: after, evo: evoLabel(e.key), key: e.key };
         if (!best || (r.unlock && !best.unlock) || (!best.unlock && r.left < best.left)) best = r;
       }
       return best;

@@ -93,6 +93,7 @@ G.stages = (function () {
           cores[i] = cores[cores.length - 1]; cores.pop();
           G.combat.aoe(R, c.x, c.y, 2.0, { flat: base(R, 1.6), element: 'physical', gauge: 0, src: 'bloom', noCrit: true, isReaction: true, knock: 0.8, color: '#9dff6a' });
           G.fx.explosion && G.fx.explosion(c.x, c.y, 2.0, { color: '#8fd13a', kind: 'bloom' });
+          G.enemyAI.bossFx && G.enemyAI.bossFx.sheet(R, 'fx_dendro_burst', c.x, c.y - 0.5, 0, 3.6, 3.6, { add: true, fps: 16 });
           G.fx.ring && G.fx.ring(c.x, c.y, 2.2, '#b6ff6a');
           G.audio.sfx('explosion', { x: c.x, y: c.y });
         }

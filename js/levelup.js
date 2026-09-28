@@ -133,6 +133,7 @@ G.progressionUI = (function () {
 .pg-desc{font-size:clamp(11.5px,2.3vh,14.5px);line-height:1.4;color:#e8f1ef;font-weight:700}
 .pg-desc b{color:#ffe07a;font-weight:900}
 .pg-hint{margin-top:auto;font-size:clamp(10px,1.9vh,12px);font-weight:800;color:#ffd98a;background:#ffb3471f;border:1px dashed #ffb34788;border-radius:8px;padding:2px 7px;line-height:1.35}
+.pg-hw{display:inline-block}
 .pg-hint.have{color:#fff;background:#ffb34755;border-style:solid;animation:pgPulse .8s ease-in-out infinite alternate}
 .pg-foot{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:clamp(8px,2.2vh,18px);animation:pgUp .3s .35s both}
 .pg-btn{font-family:inherit;font-weight:900;font-size:clamp(13px,2.6vh,16px);color:#fff4d6;border:2px solid #f0d49a;border-radius:99px;padding:7px 18px;min-height:40px;
@@ -327,6 +328,7 @@ G.progressionUI = (function () {
 .pg-rec{display:flex;align-items:center;gap:3px;padding:2px 8px 2px 3px;border-radius:99px;background:#0b1a24d9;border:1px solid #ffffff22;font-weight:900;font-size:12px;color:#fff9}
 .pg-rec .pg-ri{position:relative;display:inline-block;width:26px;height:26px;border-radius:50%;background:#ffffff12}
 .pg-rec .pg-ri .pg-orb{width:100%;font-size:12px;box-shadow:none}
+.pg-ri.sil .pg-art{filter:brightness(0) drop-shadow(0 0 1px #ffe7a8)}.pg-ri.q{display:inline-grid;place-items:center}.pg-ri.q b{font-size:12px;color:#cdd6ee;font-weight:900;line-height:1}
 .pg-rec .pg-ri.gold{background:#ffc34a44;box-shadow:0 0 0 1.5px #ffc34a}
 .pg-rec .pg-rt{display:flex;flex-direction:column;line-height:1.1;margin-left:3px}
 .pg-rec .pg-rt b{font-size:11.5px;color:#fff4d6}.pg-rec .pg-rt i{font-style:normal;font-size:10.5px;color:#9fe8c8}
@@ -564,7 +566,8 @@ G.progressionUI = (function () {
     if (ev && ev.unlock) evb = `<div class="pg-evob unlock">★ 進化解放！ →「${ev.evo}」</div>`;
     else if (ev && ev.left <= 3) evb = `<div class="pg-evob near">進化まで あと${ev.left}！</div>`;
     const hint = !evb && up.cat !== 'evo' && up.cat !== 'bless' && key[0] !== '_' ? G.upgradeHelpers.evoHint(R, key) : null;
-    const hintHtml = hint ? `<div class="pg-hint${hint.have ? ' have' : ''}">${hint.text}</div>` : '';
+    // wrap between the two phrases (never an orphan 「能」 on the next line)
+    const hintHtml = hint ? `<div class="pg-hint${hint.have ? ' have' : ''}">${hint.text.replace(/^(条件を満たすと)(.+)$/, '<span class="pg-hw">$1</span><span class="pg-hw">$2</span>')}</div>` : '';
     const catTxt = up.cat === 'char' && up.char && G.data.characters[up.char] ? G.data.characters[up.char].name + '専用' : (CAT[up.cat] || '');
     return `<div class="pg-top"><span class="pg-cat">${catTxt}</span>${flag}${art(key)}${o.num ? `<span class="pg-key${evb ? ' up' : ''}">${o.num}</span>` : ''}${evb}</div>
       <div class="pg-body">${stars(r)}<div class="pg-name">${up.name}</div>${pips}<div class="pg-desc">${nl(up.desc ? up.desc(Math.max(1, lv)) : '')}</div>${hintHtml}</div>`;
@@ -612,7 +615,7 @@ G.progressionUI = (function () {
     ov.style.setProperty('--chainHue', Math.min(chain - 1, 6) * -18 + 'deg');
     ov.innerHTML = `<div class="pg-rays"></div><div class="pg-lvtitle"><h2>LEVEL UP!${chain > 1 ? `<span class="pg-chainx">×${chain}</span>` : ''}</h2>
       <div class="pg-lvnum">Lv.${R.player.level - 1} → Lv.${R.player.level}${more ? `<span class="pg-more">つづく！ あと${more}回</span>` : ''}</div></div>
-      <div class="pg-cards"></div><div class="pg-foot"><button class="pg-btn pg-reroll"></button><span class="pg-tip">1〜${offer.length}キー / タップで えらぶ</span></div>
+      <div class="pg-cards"></div><div class="pg-foot"><button class="pg-btn pg-reroll"></button><span class="pg-tip">1〜${offer.length}キー / タップで選ぶ</span></div>
       <div class="pg-build pg-build-mini"></div>`;
     renderBuild(ov.querySelector('.pg-build'), R, true);
     const close = G.ui.modal(ov);
@@ -737,8 +740,8 @@ G.progressionUI = (function () {
     const choiceI = got.findIndex(g => g.choice); let choosing = false, choicePick = null;
     function choiceCard() {
       const c = document.createElement('div'); c.className = 'pg-card r4 pg-qcard';
-      c.innerHTML = `<div class="pg-top"><span class="pg-cat">ティマイオスの贈り物</span><span class="pg-new">えらべる！</span><div class="pg-art"><b class="pg-qmark">？</b></div></div>
-        <div class="pg-body">${stars(4)}<div class="pg-name">1つ えらぼう！</div><div class="pg-desc">新しいランチャーが<br>手に入るチャンス！</div></div>`;
+      c.innerHTML = `<div class="pg-top"><span class="pg-cat">ティマイオスの贈り物</span><span class="pg-new">選べる！</span><div class="pg-art"><b class="pg-qmark">？</b></div></div>
+        <div class="pg-body">${stars(4)}<div class="pg-name">1つ選ぼう！</div><div class="pg-desc">新しいランチャーが<br>手に入るチャンス！</div></div>`;
       return c;
     }
     function openChoice() {
@@ -746,7 +749,7 @@ G.progressionUI = (function () {
       choosing = true;
       const LR = G.launcherRules, left = LR ? LR.left(R) : 2, max = LR ? LR.MAX_KINDS : 2;
       const panel = document.createElement('div'); panel.className = 'pg-choice'; panel.dataset.pick = 'choice';
-      panel.innerHTML = `<div class="pg-choice-title"><small>ティマイオスの贈り物</small>1つ えらんでね！</div><div class="pg-cards"></div>
+      panel.innerHTML = `<div class="pg-choice-title"><small>ティマイオスの贈り物</small>1つ選んでね！</div><div class="pg-cards"></div>
         <div class="pg-choice-note">ランチャーは 1回の冒険で <b>${max}種類</b>まで（あと <b>${left}</b>種類）</div>`;
       ov.append(panel);
       const box = panel.querySelector('.pg-cards'); let picked = false;
@@ -902,12 +905,16 @@ G.progressionUI = (function () {
   /* ------------------------------------------------------------------ build panel (owned items + evolution recipes) */
   // rule = G.upgradeHelpers.evoLeft (upgrades.js): every requirement at MAX
   function recipeState(R, e) {
-    if (R.evolved[e.key]) return { done: true, text: '進化ずみ！' };
+    if (R.evolved[e.key]) return { done: true, text: '進化済み！' };
     const left = G.upgradeHelpers.evoLeft(R, e);
     if (left === 0) return { ready: true, text: '宝箱で進化！' };
-    return { left, text: `ぜんぶMAXまで あと${left}` };
+    return { left, text: `すべてMAXまで あと${left}` };
   }
-  const reqIcons = (R, e) => e.requires.map(k => { const u = G.upgrades[k], l = R.levels[k] || 0; return `<span class="pg-ri${l >= u.max ? ' max' : l > 0 ? '' : ' none'}" title="${u.name} ${l >= u.max ? 'MAX' : 'Lv' + l + '/' + u.max}">${art(k)}</span>`; }).join('+');
+  const known = key => !G.skillbook || G.skillbook.has(key);
+  /* スキルブック rule: until an evolution was achieved once its name is 「？？？」 and materials you do not own yet show as 「？」 */
+  const reqIcons = (R, e) => e.requires.map(k => { const u = G.upgrades[k], l = R.levels[k] || 0;
+    if (!l && !known(e.key)) return '<span class="pg-ri none q" title="？？？"><b>？</b></span>';
+    return `<span class="pg-ri${l >= u.max ? ' max' : l > 0 ? '' : ' none'}" title="${u.name} ${l >= u.max ? 'MAX' : 'Lv.' + l + '/' + u.max}">${art(k)}</span>`; }).join('+');
   /** renders the player's current build into container (also usable from the pause menu: G.progressionUI.renderBuild(el, G.run)) */
   function renderBuild(container, R, mini) {
     ensureCss(); if (!container || !R) return;
@@ -918,14 +925,14 @@ G.progressionUI = (function () {
       .map(e => ({ e, st: recipeState(R, e) })).sort((a, b) => (!!a.st.done - !!b.st.done) || (!!b.st.ready - !!a.st.ready) || ((a.st.left || 0) - (b.st.left || 0)));
     const items = own.map(k => {
       const u = G.upgrades[k], lv = R.levels[k], evo = (G.evolutions || []).find(e => e.base === k && R.evolved[e.key]);
-      return `<div class="pg-bi r${u.rarity}${evo ? ' evo' : ''}" title="${u.name}">${art(evo ? evo.key : k)}<b>${lv >= u.max ? 'MAX' : 'Lv' + lv}</b></div>`;
+      return `<div class="pg-bi r${u.rarity}${evo ? ' evo' : ''}" title="${u.name}">${art(evo ? evo.key : k)}<b>${lv >= u.max ? 'MAX' : 'Lv.' + lv}</b></div>`;
     }).join('');
     const rec = recipes.slice(0, mini ? 2 : 9).map(({ e, st }) => `<div class="pg-rec${st.ready ? ' ready' : st.done ? ' done' : st.left <= 2 ? ' near' : ''}">
-      ${reqIcons(R, e)}→<span class="pg-ri gold">${art(e.key)}</span>
-      <span class="pg-rt"><b>${G.upgrades[e.key].name}</b><i>${st.text}</i></span></div>`).join('');
+      ${reqIcons(R, e)}→<span class="pg-ri gold${known(e.key) ? '' : ' sil'}">${art(e.key)}</span>
+      <span class="pg-rt"><b>${G.upgradeHelpers.evoLabel(e.key)}</b><i>${st.text}</i></span></div>`).join('');
     container.innerHTML = mini ? `<div class="pg-brow">${items}</div>${rec ? `<div class="pg-recs">${rec}</div>` : ''}`
       : `<div class="pg-ph"><h3>いまの装備</h3></div><div class="pg-brow big">${items || '<span class="pg-empty">まだなし</span>'}</div>
-         <div class="pg-ph" style="margin-top:8px"><h3>進化レシピ</h3></div><div class="pg-recs big">${rec || '<span class="pg-empty">武器を取ると ここに出るよ</span>'}</div>`;
+         <div class="pg-ph" style="margin-top:8px"><h3>進化</h3></div><div class="pg-recs big">${rec || '<span class="pg-empty">武器を取ると ここに出るよ</span>'}</div>`;
     return container;
   }
 
@@ -943,7 +950,7 @@ G.progressionUI = (function () {
   }
   function metaLine(key, d, lv) {
     if (key === 'reroll') return `引き直し 合計 <b>${2 + lv}回</b>`;
-    if (d.max === 1) return lv ? '<b>解放ずみ！</b>' : 'まだ';
+    if (d.max === 1) return lv ? '<b>解放済み！</b>' : 'まだ';
     return `${d.name} <b>${metaFx(d, lv)}</b>`;
   }
   function renderMeta(container) {
@@ -1090,7 +1097,7 @@ G.progressionUI = (function () {
       svg.querySelectorAll('.pg-node').forEach(g => g.addEventListener('click', () => { sel = +g.dataset.i; G.audio.sfx('uiHover'); draw(); }));
       const c = C[sel], owned = sel < n, isNext = sel === n, cost = c.cost;
       info.innerHTML = `<div class="pg-cn">第${sel + 1}重 ・ C${sel + 1}</div><h4>${c.name}</h4><p>${c.text}</p>
-        <div class="pg-cstate">${owned ? '<span style="color:#7dff8a">✓ 解放ずみ</span>' : isNext ? '' : `<span style="color:#9fb0d0">先に C${n + 1} を解放しよう</span>`}</div>
+        <div class="pg-cstate">${owned ? '<span style="color:#7dff8a">✓ 解放済み</span>' : isNext ? '' : `<span style="color:#9fb0d0">先に C${n + 1} を解放しよう</span>`}</div>
         ${isNext ? `<button class="pg-btn gold pg-cbuy"><img src="assets/icon_mora.webp" alt="" style="width:20px;height:20px;vertical-align:-4px"> ${U.fmtNum(cost)} で解放</button>` : ''}
         <div class="pg-clist">${C.map((x, i) => `<span class="${i < n ? 'on' : ''}">C${i + 1} ${x.short}${i < n ? ' ✓' : ''}</span>`).join('')}</div>`;
       const b = info.querySelector('.pg-cbuy');

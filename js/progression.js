@@ -48,7 +48,7 @@ G.progression = (function () {
     electro: { name: '高圧の雷', desc: '元素反応でエネルギー回復', el: 'electro' },
     anemo: { name: '迅速の風', desc: '移動速度 +10%・クールタイム -5%', el: 'anemo' },
     geo: { name: '堅牢の岩', desc: 'シールド +15%・与ダメージ +15%', el: 'geo' },
-    all: { name: '万象の共鳴', desc: 'キャラとランチャー2種で 3つの元素！ 全ダメージ +20%・被ダメ -10%', el: 'all' },
+    all: { name: '万象の共鳴', desc: 'キャラとランチャー2種で 3つの元素！ 全ダメージ +20%・受けるダメージ -10%', el: 'all' },
   };
   const EARLY_T = 180;
   const LAUNCH_EL = ['pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo'];
@@ -222,7 +222,7 @@ G.progression = (function () {
     for (const q of R.pickups) if (q.type === 'xp' || q.type === 'mora' || q.type === 'energy') { if (!q.magnet) { q.magnet = true; q.sp = -4; } }
     G.fx.swirl && G.fx.swirl(p.x, p.y, 6, '#5cf2c8'); G.fx.ring && G.fx.ring(p.x, p.y, 7, '#5cf2c8');
     G.audio.sfx('windBlast');
-    G.bus.emit('notice', { text: '蒲公英の風！ ぜんぶ吸い寄せる！', color: '#5cf2c8' });
+    G.bus.emit('notice', { text: '蒲公英の風！ すべて吸い寄せる！', color: '#5cf2c8' });
   }
 
   /* ---------------- evolution readiness ("進化の準備OK！") ---------------- */
@@ -231,7 +231,7 @@ G.progression = (function () {
     for (const k of evoReady(R)) {
       if (R.evoAnnounced[k]) continue;
       R.evoAnnounced[k] = true; R.evoReadyT = R.time;
-      G.bus.emit('notice', { text: '★ 進化の準備OK！ 宝箱で「' + G.upgrades[k].name + '」に！', color: '#ffd24a' });
+      G.bus.emit('notice', { text: '★ 進化の条件を満たした！ 宝箱で「' + G.upgradeHelpers.evoLabel(k) + '」へ進化可能！', color: '#ffd24a' });
       G.audio.sfx('star', { rarity: 5 });
     }
   }

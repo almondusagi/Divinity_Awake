@@ -23,15 +23,35 @@
   function onS(x, y, m) { return G.render.onScreen(x, y, m); }
   const qlv = () => G.save.data.settings.reducedFx ? 0 : (G.quality ? G.quality.level : 3);
   function count(R, type) { let n = 0; for (const h of R.hazards) if (h.type === type && !h.done) n++; return n; }
+  /* flipbook effects from the owner pack (4×2 sheets, row-major, played once): drawn in the air layer via a visual hazard */
+  function sheetDrawA(ctx, h, t) {
+    const im = G.assets.img[h.img]; if (!im) return;
+    const f = Math.min(7, Math.floor(h.t * h.fps)), cw = im.width / 4, ch = im.height / 2;
+    ctx.globalCompositeOperation = h.add ? 'lighter' : 'source-over'; ctx.globalAlpha = h.alpha || 1;
+    ctx.translate(h.x, h.y); if (h.ang) ctx.rotate(h.ang);
+    ctx.drawImage(im, (f & 3) * cw, (f >> 2) * ch, cw, ch, -h.w / 2, -h.h / 2, h.w, h.h);
+    if (h.ang) ctx.rotate(-h.ang); ctx.translate(-h.x, -h.y);
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  }
+  function noop() { }
+  /** play fx_lightning_slash / fx_dendro_burst at (x,y) rotated by ang, size w×h (world units) */
+  function sheet(R, img, x, y, ang, w, h, o) {
+    if (!G.assets.img[img]) return null;
+    const fps = (o && o.fps) || 12;
+    return hz(R, { type: 'sheetFx', img, x, y, ang: ang || 0, w, h, fps, add: !!(o && o.add), alpha: o && o.alpha, life: 8 / fps, dmg: 0, upd: noop, drawA: sheetDrawA });
+  }
 
   /* ---------------- shared boss plumbing ---------------- */
-  const COL = { zhongli: '#ffd24a', raiden: '#c77dff', nahida: '#8fd13a' };
+  const COL = { zhongli: '#ffd24a', raiden: '#c77dff', nahida: '#8fd13a', drake: '#ffb23a', sentinel: '#c77dff', shroom: '#8fd13a' };
   const PH_TEXT = {
     zhongli: ['', '', '岩の力が 目覚める…！', '天が 落ちてくる…！'],
     raiden: ['', '', '雷鳴が とどろく…！', '無想の境地…！'],
     nahida: ['', '', '夢の森が ひろがる…！', '知恵の嵐が くる！'],
+    drake: ['', '', '岩竜が いきり立つ！', '岩竜が 暴れだした！'],
+    sentinel: ['', '', '番機の目が 赤く光る…！', '番機が 暴走した！'],
+    shroom: ['', '', '胞子が あふれだす…！', '森獣が 怒り狂う！'],
   };
-  const TH = [0, 1, 0.65, 0.3]; // phase n starts below TH[n]
+  const TH = [0, 1, 0.65, 0.3]; // phase n starts below TH[n] (mid-bosses: def.phaseTH)
   function phaseUp(R, e, ph) {
     e.phase = ph; A.reset(e); set(e, 'phase', 2.0); e.armorMul = 0.05; e.pose = 'strike';
     const c = COL[e.def.ai];
@@ -44,7 +64,8 @@
   }
   function checkPhase(R, e) {
     if (e.st === 'phase') return false;
-    if (e.phase < 3 && e.hp < e.maxHp * TH[e.phase + 1]) { phaseUp(R, e, e.phase + 1); return true; }
+    const th = e.def.phaseTH || TH;
+    if (e.phase < 3 && e.hp < e.maxHp * th[e.phase + 1]) { phaseUp(R, e, e.phase + 1); return true; }
     return false;
   }
   function enrage(e) { if (e.enraged && !e.enrApplied) { e.enrApplied = true; e.dmg *= 1.35; notice(e.def.name + 'が本気になった！', COL[e.def.ai]); sfx('bossRoar', e); } }
@@ -66,6 +87,8 @@
   A.init = function (R, e) {
     baseInit(R, e);
     const ai = e.def.ai;
+    if (ai === 'drake' || ai === 'sentinel' || ai === 'shroom') { e.phase = 1; e.cycle = 0; e.armorMul = 1; e.cd = 2.6; e.orbitDir = 1; e.turnT = 4; e.z = ai === 'sentinel' ? 0.9 : 0; }
+    if (ai === 'lancer' || ai === 'ronin' || ai === 'chopper') e.cd = U.rand(0.8, 2.2);
     if (ai === 'zhongli' || ai === 'raiden' || ai === 'nahida') {
       e.phase = 1; e.cycle = 0; e.armorMul = 1; e.cd = 2.4; e.orbitDir = 1; e.turnT = 4; e.z = 0;
       if (ai === 'nahida') e.z = 0.4;
@@ -180,10 +203,10 @@
       draw(ctx, o) {
         const hh = o.h; if (!hh.up) return;
         const t = G.run.time, rise = U.ease.outBack(Math.min(1, (hh.t - hh.delay) / 0.25)), end = Math.min(1, (hh.delay + hh.life - hh.t) / 0.3);
-        const S = pillarSprite(), w = 1.55, H = 3.4 * rise * end, top = o.y - H + 0.15;
+        const S = G.assets.img.fx_rock_pillar || pillarSprite(), W0 = S === pillarC ? 1.55 : 1.6, H0 = S === pillarC ? 3.4 : 4.27, w = W0, H = H0 * rise * end, top = o.y - H + 0.15;
         if (H <= 0.05) return;
         G.render.shadow(ctx, o.x, o.y, 1.0, 0.4);
-        ctx.drawImage(S, 0, 0, S.width, S.height * Math.min(1, H / 3.4), o.x - w / 2, top, w, H);
+        ctx.drawImage(S, 0, 0, S.width, S.height * Math.min(1, H / H0), o.x - w / 2, top, w, H);
         if (hh.pulsing) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.35 + 0.3 * Math.sin(t * 20); ctx.drawImage(G.assets.glow('#ffd24a', 64), o.x - 1.2, top + 0.4, 2.4, 2.4); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
       } };
   }
@@ -221,7 +244,14 @@
   function meteorDrawA(ctx, h, t) {
     const k = Math.min(1, h.t / h.delay); if (k < 0.35) return;
     const f = (k - 0.35) / 0.65, z = (1 - f) * (1 - f) * 24, ox = (1 - f) * 7;
-    const mx = h.x - ox, my = h.y - z - 1.2, sz = h.r * 1.25;
+    const MI = G.assets.img.fx_meteor, mx = MI ? h.x + ox : h.x - ox, my = h.y - z - 1.2, sz = h.r * 1.25;
+    if (MI) { // sprite: rock sits at ~(33%, 66%) of the image, trail up-right
+      FX().darkAura(ctx, mx, my, sz * 0.8, t + h.seed, 0.9);
+      const S = sz * 2.6; ctx.drawImage(MI, mx - S * 0.33, my - S * 0.66, S, S);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.45; ctx.drawImage(G.assets.glow('#ffd24a', 64), mx - sz * 1.4, my - sz * 1.4, sz * 2.8, sz * 2.8);
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      return;
+    }
     // fiery trail + dark aura
     ctx.lineCap = 'round'; ctx.globalAlpha = 0.55; ctx.strokeStyle = '#0e0016'; ctx.lineWidth = sz * 0.9;
     ctx.beginPath(); ctx.moveTo(mx - 3.5, my - 12); ctx.lineTo(mx, my); ctx.stroke();
@@ -420,6 +450,7 @@
           const a = e.lockA; for (let i = 0; i < 5; i++) FX().after(e, 0.7 - i * 0.1, '#c77dff');
           e.x += Math.cos(a) * 11; e.y += Math.sin(a) * 11; faceTo(e, e.x + Math.cos(a), e.y + Math.sin(a));
           G.fx.shake(0.35); sfx('beam', e); FX().slash(e.x, e.y - 1, a, 1.6);
+          sheet(R, 'fx_lightning_slash', e.x - Math.cos(a) * 5.5, e.y - Math.sin(a) * 5.5 - 1, a, 12, 4, { add: true, fps: 14 });
           G.fx.lightning && G.fx.lightning(e.x - Math.cos(a) * 11, e.y - Math.sin(a) * 11 - 1, e.x, e.y - 1, '#e0b0ff');
           e.rep--; set(e, 'iaiRec', e.rep > 0 ? 0.25 : 0.55);
         }
@@ -466,6 +497,7 @@
     A.reset(e); return null;
   };
   function musouFire(R, h) {
+    { const c = Math.cos(h.ang), s = Math.sin(h.ang); for (let i = -1; i <= 1; i++) sheet(R, 'fx_lightning_slash', h.x + c * (h.len / 2 + i * 13), h.y + s * (h.len / 2 + i * 13) - 1.2, h.ang, 16, h.w * 2.4, { add: true, fps: 12 }); }
     G.fx.flash && G.fx.flash('#f0d8ff', 0.6); G.fx.shake(1.0); G.fx.zoomPunch && G.fx.zoomPunch(0.05);
     G.fx.slowmo && G.fx.slowmo(0.4, 0.25);
     const c = Math.cos(h.ang), s = Math.sin(h.ang);
@@ -488,6 +520,7 @@
       if (inCircle(p, h.x, h.y, h.r)) hurtP(R, h);
       FX().ring(h.x, h.y, h.r * 1.4, 0.4, 0.3, '#8fd13a');
       G.fx.burst && G.fx.burst(h.x, h.y - 0.3, 12, '#b6ff6a', { max: 7, life: 0.45 });
+      sheet(R, 'fx_dendro_burst', h.x, h.y - 0.5, 0, h.r * 2.6, h.r * 2.6, { add: true, fps: 16 });
       FX().burst(h.x, h.y - 0.3, h.r * 0.8, 0);
       FX().sfx('explosion', h.x, h.y);
     }
@@ -521,6 +554,13 @@
     const k = Math.min(1, h.t / h.delay), post = h.fired ? 1 - (h.t - h.delay) / h.life : 1, R0 = h.R * U.ease.outCubic(Math.min(1, h.t / 0.6));
     ctx.globalAlpha = (0.3 + 0.35 * k) * post; ctx.fillStyle = h.fired ? '#8fd13a' : '#14002a';
     ctx.beginPath(); ctx.arc(h.x, h.y, R0, 0, TAU); ctx.fill();
+    const DP = G.assets.img.fx_dream_pattern;
+    if (DP) { // owner-pack decal: slowly rotating, glowing brighter as the dream closes
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = (0.35 + 0.5 * k) * post;
+      const rt = t * 0.25; ctx.translate(h.x, h.y); ctx.rotate(rt); ctx.drawImage(DP, -R0, -R0, R0 * 2, R0 * 2); ctx.rotate(-rt * 2);
+      ctx.globalAlpha = 0.25 * k * post; ctx.drawImage(DP, -R0 * 0.55, -R0 * 0.55, R0 * 1.1, R0 * 1.1); ctx.rotate(rt); ctx.translate(-h.x, -h.y);
+      ctx.globalCompositeOperation = 'source-over';
+    } else {
     // rotating mandala of leaves / rings (generic pattern)
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = (0.25 + 0.4 * k) * post; ctx.strokeStyle = k > 0.8 ? '#b6ff4a' : '#6ad13a'; ctx.lineWidth = 0.08;
@@ -533,6 +573,7 @@
     for (let i = 0; i < n; i++) { const a = -rot * 1.3 + i / n * TAU; ctx.moveTo(h.x + Math.cos(a) * R0 * 0.55, h.y + Math.sin(a) * R0 * 0.55); ctx.lineTo(h.x + Math.cos(a + 0.26) * R0 * 0.8, h.y + Math.sin(a + 0.26) * R0 * 0.8); }
     ctx.stroke();
     ctx.globalCompositeOperation = 'source-over';
+    }
     // danger rim
     ctx.globalAlpha = 0.9 * post; ctx.strokeStyle = '#0c0012'; ctx.lineWidth = 0.14; ctx.beginPath(); ctx.arc(h.x, h.y, R0, 0, TAU); ctx.stroke();
     if (!h.fired) for (const s of h.safes) { // safe zones: bright, calm, pulsing
@@ -664,11 +705,287 @@
     A.reset(e); return null;
   };
 
+  /* ================= stage 2–4 grunts (owner pack sprites) ================= */
+  function vis(e, m) { return onS(e.x, e.y, m == null ? -0.8 : m); }
+  /* 璃月の槍兵: short telegraphed lane → quick lunge thrust */
+  A.lancer = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player;
+    if (e.st === 'move') {
+      e.cd -= dt;
+      if (e.cd <= 0 && dist < 3.8 && vis(e)) {
+        set(e, 'wind', 0.6); e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise'; e.lx = nx; e.ly = ny;
+        e.tele = { type: 'lane', x: e.x, y: e.y, ang: Math.atan2(ny, nx), len: 3.9, w: 0.9, k: 0 }; return vel(0, 0);
+      }
+      return vel(nx * e.sp, ny * e.sp);
+    }
+    if (e.st === 'wind') {
+      const k = e.stT / e.stDur; if (k < 0.5) { e.lx = nx; e.ly = ny; faceTo(e, p.x, p.y); }
+      e.tele.x = e.x; e.tele.y = e.y; e.tele.ang = Math.atan2(e.ly, e.lx); e.tele.k = k; e.shakeAmp = 0.02 + 0.03 * k;
+      if (k >= 1) {
+        e.tele = null; e.shakeAmp = 0; e.pose = 'strike'; e.dashing = true; set(e, 'thrust', 0.16);
+        lane(R, e, { x: e.x, y: e.y, ang: Math.atan2(e.ly, e.lx), len: 3.9, w: 0.9, delay: 0, life: 0.22, dmg: e.dmg, color: '#ffd24a', src: 'spear', lift: 0.9 });
+      }
+      return vel(0, 0);
+    }
+    if (e.st === 'thrust') { if (e.stT >= e.stDur) { e.dashing = false; set(e, 'recover', 0.45); } return vel(e.lx * 6, e.ly * 6); }
+    if (e.st === 'recover') { if (e.stT >= e.stDur) { A.reset(e); e.cd = U.rand(2.2, 3.4); } return vel(0, 0); }
+    A.reset(e); return null;
+  };
+  /* 稲妻の浪人: draws the katana (lane telegraph) → dashes through with a purple lightning slash line */
+  A.ronin = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player;
+    if (e.st === 'move') {
+      e.cd -= dt;
+      if (e.cd <= 0 && dist < 7 && vis(e)) {
+        set(e, 'prep', 0.75); e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise'; e.lx = nx; e.ly = ny;
+        e.tele = { type: 'lane', x: e.x, y: e.y, ang: Math.atan2(ny, nx), len: 7.5, w: 1.1, k: 0 }; return vel(0, 0);
+      }
+      const side = ((e.id & 1) ? 1 : -1) * 0.35;
+      return vel((nx - ny * side) * e.sp, (ny + nx * side) * e.sp);
+    }
+    if (e.st === 'prep') {
+      const k = e.stT / e.stDur; if (k < 0.55) { e.lx = nx; e.ly = ny; faceTo(e, p.x, p.y); }
+      e.tele.x = e.x; e.tele.y = e.y; e.tele.ang = Math.atan2(e.ly, e.lx); e.tele.k = k; e.shakeAmp = 0.02 + 0.04 * k;
+      if (k >= 1) {
+        const a = Math.atan2(e.ly, e.lx);
+        e.tele = null; e.shakeAmp = 0; e.pose = 'strike'; set(e, 'dash', 0.26);
+        lane(R, e, { x: e.x, y: e.y, ang: a, len: 7.5, w: 1.1, delay: 0, life: 0.3, dmg: e.dmg * 1.1, color: '#c77dff', src: 'ronin', lift: 1.0 });
+        if (vis(e, 2)) sheet(R, 'fx_lightning_slash', e.x + Math.cos(a) * 3.75, e.y + Math.sin(a) * 3.75 - 1, a, 7.5, 2.4, { add: true, fps: 16 });
+        FX().sfx('electro', e.x, e.y);
+      }
+      return vel(0, 0);
+    }
+    if (e.st === 'dash') { if (U.chance(dt * 30)) FX().after(e, 0.5, '#8a3cff'); if (e.stT >= e.stDur) set(e, 'recover', 0.7); return vel(e.lx * 28, e.ly * 28); }
+    if (e.st === 'recover') { e.pose = 'idle'; if (e.stT >= e.stDur) { A.reset(e); e.cd = U.rand(2.8, 4.2); } return vel(0, 0); }
+    A.reset(e); return null;
+  };
+  /* 砂漠の傭兵: slow overhead chop on a circle in front of him */
+  A.chopper = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player;
+    if (e.st === 'move') {
+      e.cd -= dt;
+      if (e.cd <= 0 && dist < 3.2 && vis(e)) {
+        set(e, 'wind', 1.0); e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise';
+        e.ax = e.x + nx * 1.3; e.ay = e.y + ny * 1.3; e.tele = { type: 'circle', x: e.ax, y: e.ay, r: 1.5, k: 0 }; return vel(0, 0);
+      }
+      return vel(nx * e.sp, ny * e.sp);
+    }
+    if (e.st === 'wind') {
+      const k = e.stT / e.stDur; e.tele.k = k; e.shakeAmp = 0.02 + 0.05 * k;
+      if (k >= 1) {
+        e.tele = null; e.shakeAmp = 0; e.pose = 'strike';
+        hz(R, { type: 'zone', x: e.ax, y: e.ay, r: 1.5, delay: 0, life: 0.2, dmg: e.dmg * 1.5, style: 'slam', src: 'chop' });
+        FX().slash(e.ax, e.ay - 0.8, Math.atan2(e.ay - e.y, e.ax - e.x), 1.2);
+        set(e, 'recover', 0.8);
+      }
+      return vel(0, 0);
+    }
+    if (e.st === 'recover') { if (e.stT >= e.stDur) { A.reset(e); e.cd = U.rand(2.6, 3.8); } return vel(0, 0); }
+    A.reset(e); return null;
+  };
+
+  /* ================= stage 2–4 mid-bosses (5:00) ================= */
+  const DSEQ = { 1: ['charge', 'slam', 'charge', 'shards'], 2: ['slam', 'charge', 'shards', 'slam'], 3: ['charge', 'slam', 'shards', 'charge', 'slam'] };
+  const SSEQ = { 1: ['beam', 'bolts', 'burst'], 2: ['beam', 'bolts', 'burst', 'beam'], 3: ['burst', 'beam', 'bolts', 'beam'] };
+  const MSEQ = { 1: ['spore', 'stomp', 'puff', 'spore'], 2: ['spore', 'puff', 'stomp', 'spore'], 3: ['spore', 'puff', 'spore', 'stomp'] };
+  function midMove(R, e, nx, ny, dist, want) {
+    const f = U.clamp((dist - want) * 0.5, -0.5, 1);
+    return vel((nx * f - ny * 0.25 * e.orbitDir) * e.sp, (ny * f + nx * 0.25 * e.orbitDir) * e.sp);
+  }
+  /* 岩竜ヴィシャップ: charge + ground slam that throws rock shards */
+  A.drake = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player; enrage(e);
+    if (checkPhase(R, e)) return vel(0, 0);
+    const ph = e.phase, cdm = (ph === 1 ? 1.2 : ph === 2 ? 1.0 : 0.8) * (e.enraged ? 0.7 : 1);
+    e.armorMul = e.st === 'phase' ? 0.05 : e.st === 'dizzy' ? 1.4 : 1;
+    switch (e.st) {
+      case 'phase': if (e.stT >= e.stDur) { A.reset(e); e.cd = 0.6; } return vel(0, 0);
+      case 'move': {
+        e.cd -= dt;
+        if (dist > 15) { blink(R, e, 8); return vel(0, 0); }
+        if (e.cd <= 0 && onS(e.x, e.y, 0)) {
+          const atk = e.atk = nextAtk(e, DSEQ); e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise';
+          if (atk === 'charge') { set(e, 'cPrep', 0.9); e.lx = nx; e.ly = ny; e.tele = { type: 'lane', x: e.x, y: e.y, ang: Math.atan2(ny, nx), len: 12, w: 2.4, k: 0 }; }
+          else if (atk === 'slam') { set(e, 'sWind', 1.0); e.tele = { type: 'circle', x: e.x, y: e.y, r: 3.6, k: 0, hue: '#8a5a10' }; e.charge = { type: 'geo', k: 0 }; }
+          else { set(e, 'shWind', 0.7); e.charge = { type: 'geo', k: 0 }; }
+          return vel(0, 0);
+        }
+        return midMove(R, e, nx, ny, dist, 4);
+      }
+      case 'cPrep': {
+        const k = e.stT / e.stDur; if (k < 0.5) { e.lx = nx; e.ly = ny; faceTo(e, p.x, p.y); }
+        e.tele.x = e.x; e.tele.y = e.y; e.tele.ang = Math.atan2(e.ly, e.lx); e.tele.k = k; e.shakeAmp = 0.03 + 0.05 * k;
+        if (U.chance(dt * 12)) FX().dust(e.x - e.lx, e.y, 0.6);
+        if (k >= 1) { e.tele = null; e.shakeAmp = 0; e.pose = 'strike'; e.dashing = true; set(e, 'charge', 0.72); e.dashHz = hz(R, { type: 'dash', x: e.x, y: e.y, r: 1.5, life: 0.72, dmg: e.dmg * 1.1, follow: e, src: 'drakeCharge' }); sfx('bossRoar', e); }
+        return vel(0, 0);
+      }
+      case 'charge': {
+        if (U.chance(dt * 30)) FX().dust(e.x + U.rand(-1, 1), e.y + U.rand(-0.2, 0.3), 0.8);
+        if (U.chance(dt * 12)) FX().after(e, 0.35, '#ffb23a');
+        if (e.stT >= e.stDur) { e.dashing = false; if (e.dashHz) e.dashHz.done = true; set(e, 'dizzy', 0.9 * cdm); e.pose = 'idle'; FX().ring(e.x, e.y, 2.4, 0.35, 0.25, '#ffb23a'); }
+        return vel(e.lx * 15, e.ly * 15);
+      }
+      case 'sWind': { // rears up, then slams — shards fly out
+        const k = e.stT / e.stDur; e.tele.k = k; e.tele.x = e.x; e.tele.y = e.y; e.charge.k = k; e.shakeAmp = 0.03 + 0.07 * k;
+        if (k >= 1) {
+          e.tele = null; e.charge = null; e.shakeAmp = 0; e.pose = 'strike';
+          hz(R, { type: 'zone', x: e.x, y: e.y, r: 3.6, delay: 0, life: 0.3, dmg: e.dmg * 1.3, style: 'slam', src: 'drakeSlam' });
+          const n = ph === 1 ? 5 : 8;
+          for (let i = 0; i < n; i++) { const a = i / n * TAU + U.rand(-0.2, 0.2), rr = U.rand(4.5, 7); hz(R, { type: 'rock', x: e.x, y: e.y, h0: 1.5, x1: e.x + Math.cos(a) * rr, y1: e.y + Math.sin(a) * rr * 0.85, delay: 0.05 * i, life: 1.0, peak: 3, r: 1.2, k0: 0.25, dmg: e.dmg * 0.7, size: 0.8, src: 'rock' }); }
+          G.fx.shake(0.55); set(e, 'dizzy', 0.9);
+        }
+        return vel(0, 0);
+      }
+      case 'shWind': { // shards rain around the player
+        const k = e.stT / e.stDur; e.charge.k = k;
+        if (k >= 1) {
+          e.charge = null; e.pose = 'strike'; const n = ph === 1 ? 5 : 8;
+          for (let i = 0; i < n; i++) { const a = U.rand(0, TAU), rr = i === 0 ? 0 : U.rand(1.5, 5); hz(R, { type: 'rock', x: e.x, y: e.y, h0: 2, x1: p.x + Math.cos(a) * rr, y1: p.y + Math.sin(a) * rr, delay: i * 0.1, life: 1.05, peak: 4, r: 1.3, k0: 0.3, dmg: e.dmg * 0.8, size: 0.9, src: 'rock' }); }
+          sfx('rockThrow', e); set(e, 'recover', 0.6);
+        }
+        return vel(0, 0);
+      }
+      case 'dizzy': case 'recover': if (e.stT >= e.stDur) { A.reset(e); e.cd = 1.1 * cdm; } return vel(0, 0);
+    }
+    A.reset(e); return null;
+  };
+  /* 雷嵐の番機: floating machine — eye beam lanes, lightning burst around itself, bolts on the player */
+  A.sentinel = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player; enrage(e);
+    e.z = 0.9 + 0.15 * Math.sin(R.time * 2 + e.id);
+    if (checkPhase(R, e)) return vel(0, 0);
+    const ph = e.phase, cdm = (ph === 1 ? 1.2 : ph === 2 ? 1.0 : 0.8) * (e.enraged ? 0.7 : 1);
+    e.armorMul = e.st === 'phase' ? 0.05 : e.st === 'cool' ? 1.5 : 1;
+    switch (e.st) {
+      case 'phase': if (e.stT >= e.stDur) { A.reset(e); e.cd = 0.6; } return vel(0, 0);
+      case 'move': {
+        e.cd -= dt;
+        if (dist > 15) { blink(R, e, 7); return vel(0, 0); }
+        if (e.cd <= 0 && onS(e.x, e.y, -0.5)) {
+          const atk = e.atk = nextAtk(e, SSEQ); e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise';
+          if (atk === 'beam') {
+            set(e, 'bPrep', 1.1); e.charge = { type: 'thunder', k: 0 }; e.lockA = Math.atan2(ny, nx);
+            const n = ph === 3 ? 3 : 1; e.beams = n; const list = [];
+            for (let i = 0; i < n; i++) list.push({ type: 'lane', x: e.x, y: e.y, ang: e.lockA + (i - (n - 1) / 2) * 0.4, len: 15, w: 1.3, k: 0 });
+            e.tele = { type: 'multi', list, k: 0 }; sfx('beamCharge', e);
+          } else if (atk === 'burst') { set(e, 'uWind', 1.0); e.charge = { type: 'thunder', k: 0 }; e.tele = { type: 'circle', x: e.x, y: e.y, r: 4.2, k: 0, hue: '#6a1fb0' }; sfx('enemyCast', e); }
+          else { set(e, 'boltWind', 0.5); e.charge = { type: 'thunder', k: 0 }; }
+          return vel(0, 0);
+        }
+        return orbit(R, e, nx, ny, dist, 6.5, 1.0);
+      }
+      case 'bPrep': {
+        const k = e.stT / e.stDur; e.charge.k = k; e.tele.k = k;
+        if (k < 0.65) e.lockA += U.clamp(U.angDiff(e.lockA, Math.atan2(p.y - e.y, p.x - e.x)), -3 * dt, 3 * dt);
+        const L = e.tele.list; for (let i = 0; i < L.length; i++) { L[i].x = e.x; L[i].y = e.y; L[i].ang = e.lockA + (i - (L.length - 1) / 2) * 0.4; }
+        faceTo(e, e.x + Math.cos(e.lockA), e.y + Math.sin(e.lockA));
+        if (k >= 1) {
+          for (const l of L) lane(R, e, { x: e.x, y: e.y, ang: l.ang, len: 15, w: 1.3, delay: 0, life: 0.45, dmg: e.dmg * 0.9, color: '#c77dff', src: 'sentinelBeam', lift: e.z + e.def.h * 0.5 });
+          e.tele = null; e.charge = null; e.pose = 'strike'; G.fx.shake(0.3); sfx('beam', e); set(e, 'cool', 1.2);
+        }
+        return vel(0, 0);
+      }
+      case 'uWind': {
+        const k = e.stT / e.stDur; e.charge.k = k; e.tele.k = k; e.tele.x = e.x; e.tele.y = e.y; e.shakeAmp = 0.03 * k;
+        if (k >= 1) {
+          e.tele = null; e.charge = null; e.shakeAmp = 0; e.pose = 'strike';
+          hz(R, { type: 'zone', x: e.x, y: e.y, r: 4.2, delay: 0, life: 0.3, dmg: e.dmg * 1.1, style: 'spark', color: '#d59bff', src: 'sentinelBurst' });
+          for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; G.fx.lightning && G.fx.lightning(e.x, e.y - 2, e.x + Math.cos(a) * 4, e.y + Math.sin(a) * 3, '#e0b0ff'); }
+          G.fx.shake(0.4); set(e, 'cool', 1.0);
+        }
+        return vel(0, 0);
+      }
+      case 'boltWind': {
+        const k = e.stT / e.stDur; e.charge.k = k;
+        if (k >= 1) {
+          e.charge = null; e.pose = 'strike'; const n = ph === 1 ? 4 : 6;
+          for (let i = 0; i < n; i++) { const tx = i === 0 ? p.x : p.x + U.rand(-3.5, 3.5), ty = i === 0 ? p.y : p.y + U.rand(-2.5, 2.5); hz(R, { type: 'zone', x: tx, y: ty, r: 1.3, delay: 0.8 + i * 0.12, life: 0.25, dmg: e.dmg * 0.7, style: 'spark', color: '#d59bff', hue: '#6a1fb0', src: 'bolt', onEnd: boltEnd }); }
+          sfx('electro', e); set(e, 'recover', 0.6);
+        }
+        return vel(0, 0);
+      }
+      case 'cool': case 'recover': if (e.stT >= e.stDur) { A.reset(e); e.cd = 1.0 * cdm; } return vel(0, 0);
+    }
+    A.reset(e); return null;
+  };
+  /* 大茸の森獣: spore clouds (slow + damage over time), stomp, spore puffs */
+  function sporeUpd(R, h, dt) {
+    if (h.t < h.delay) return;
+    const p = R.player;
+    if (inCircle(p, h.x, h.y, h.r)) {
+      p.x -= (p.vx || 0) * dt * 0.5; p.y -= (p.vy || 0) * dt * 0.5; // thick spores: move at half speed
+      if (h.hitCd > 0) h.hitCd -= dt; else { hurtP(R, h); h.hitCd = 0.7; }
+    }
+  }
+  function sporeDrawG(ctx, h, t) {
+    if (!onS(h.x, h.y, h.r + 2)) return;
+    if (h.t < h.delay) { FX().teleCircle(ctx, h.x, h.y, h.r, h.t / h.delay, t, '#2f6a1a'); return; }
+    const k = Math.min(1, (h.t - h.delay) / 0.4) * Math.min(1, (h.delay + h.life - h.t) / 0.6);
+    FX().auraLite(ctx, h.x, h.y, h.r * 0.9, t + h.seed, 0.6 * k);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 6; i++) { const a = h.seed + i * 1.05 + t * 0.4, rr = h.r * (0.3 + 0.35 * ((i * 37) % 3) / 2), cx = h.x + Math.cos(a) * rr, cy = h.y + Math.sin(a) * rr * 0.7 - 0.3, s = h.r * 0.8; ctx.globalAlpha = 0.45 * k; ctx.drawImage(G.assets.glow('#8fd13a', 64), cx - s, cy - s, s * 2, s * 2); }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.8 * k; ctx.strokeStyle = '#1a0026'; ctx.lineWidth = 0.1; ctx.setLineDash([0.4, 0.3]); ctx.lineDashOffset = t;
+    ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, TAU); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+  A.shroom = function (R, e, dt, nx, ny, dist) {
+    e.stT += dt; const p = R.player; enrage(e);
+    if (checkPhase(R, e)) return vel(0, 0);
+    const ph = e.phase, cdm = (ph === 1 ? 1.2 : ph === 2 ? 1.0 : 0.8) * (e.enraged ? 0.7 : 1);
+    e.armorMul = e.st === 'phase' ? 0.05 : 1;
+    switch (e.st) {
+      case 'phase': if (e.stT >= e.stDur) { A.reset(e); e.cd = 0.6; } return vel(0, 0);
+      case 'move': {
+        e.cd -= dt;
+        if (dist > 15) { blink(R, e, 7); return vel(0, 0); }
+        if (e.cd <= 0 && onS(e.x, e.y, 0)) {
+          let atk = nextAtk(e, MSEQ); if (atk === 'spore' && count(R, 'spore') >= 2 + ph) atk = 'puff';
+          e.atk = atk; e.faceLock = true; faceTo(e, p.x, p.y); e.pose = 'raise'; e.charge = { type: 'dendro', k: 0 };
+          if (atk === 'spore') set(e, 'spWind', 0.7);
+          else if (atk === 'stomp') { set(e, 'stWind', 0.95); e.tele = { type: 'circle', x: e.x, y: e.y, r: 3.4, k: 0, hue: '#2f6a1a' }; }
+          else set(e, 'pfWind', 0.8);
+          return vel(0, 0);
+        }
+        return midMove(R, e, nx, ny, dist, 4.5);
+      }
+      case 'spWind': {
+        const k = e.stT / e.stDur; e.charge.k = k;
+        if (k >= 1) {
+          e.charge = null; e.pose = 'strike'; const n = ph === 3 ? 2 : 1;
+          for (let i = 0; i < n; i++) { const tx = i === 0 ? p.x + (p.vx || 0) * 0.4 : p.x + U.rand(-3, 3), ty = i === 0 ? p.y + (p.vy || 0) * 0.4 : p.y + U.rand(-2, 2); hz(R, { type: 'spore', x: tx, y: ty, r: 3.0, delay: 0.9, life: 6, dmg: e.dmg * 0.35, src: 'spore', upd: sporeUpd, drawG: sporeDrawG }); }
+          FX().sfx('enemyCast', e.x, e.y, true); set(e, 'recover', 0.6);
+        }
+        return vel(0, 0);
+      }
+      case 'stWind': {
+        const k = e.stT / e.stDur; e.charge.k = k; e.tele.k = k; e.tele.x = e.x; e.tele.y = e.y; e.shakeAmp = 0.03 + 0.05 * k;
+        if (k >= 1) {
+          e.tele = null; e.charge = null; e.shakeAmp = 0; e.pose = 'strike';
+          hz(R, { type: 'zone', x: e.x, y: e.y, r: 3.4, delay: 0, life: 0.3, dmg: e.dmg * 1.2, style: 'slam', src: 'stomp' });
+          sheet(R, 'fx_dendro_burst', e.x, e.y - 0.8, 0, 6, 6, { add: true, fps: 14, alpha: 0.8 });
+          set(e, 'recover', 0.9);
+        }
+        return vel(0, 0);
+      }
+      case 'pfWind': {
+        const k = e.stT / e.stDur; e.charge.k = k;
+        if (k >= 1) {
+          e.charge = null; e.pose = 'strike'; const n = ph === 1 ? 10 : 14, o = U.rand(0, 1);
+          for (let i = 0; i < n; i++) spiralShot(R, e, (i + o) / n * TAU, 3.4, 0.5, '#9dff6a');
+          set(e, 'recover', 0.7);
+        }
+        return vel(0, 0);
+      }
+      case 'recover': if (e.stT >= e.stDur) { A.reset(e); e.cd = 1.1 * cdm; } return vel(0, 0);
+    }
+    A.reset(e); return null;
+  };
+
   /* ================= extras drawn on the boss sprites ================= */
   const baseExtra = A.drawExtra;
   A.drawExtra = function (ctx, e, x, y, H, t) {
     const ai = e.def.ai;
-    if (ai !== 'zhongli' && ai !== 'raiden' && ai !== 'nahida' && ai !== 'nahidaClone') { baseExtra(ctx, e, x, y, H, t); return; }
+    if (!COL[ai] && ai !== 'nahidaClone') { baseExtra(ctx, e, x, y, H, t); return; }
     const F = G.enemyFx, c = e.charge, col = COL[ai === 'nahidaClone' ? 'nahida' : ai];
     if (c) { // gathering power at the hands: element glow wrapped in the dark aura
       const fl = Math.hypot(e.face.x, e.face.y) || 1, hx = x + e.face.x / fl * 0.45, hy = y - H * 0.55;
@@ -711,12 +1028,15 @@
 
   /* ================= debug hooks (read by js/debug.js / debugpanel.js) ================= */
   A.seqs = A.seqs || {};
-  A.seqs.zhongli = ZSEQ; A.seqs.raiden = RSEQ; A.seqs.nahida = NSEQ;
-  const SEQS = { zhongli: ZSEQ, raiden: RSEQ, nahida: NSEQ };
+  A.seqs.zhongli = ZSEQ; A.seqs.raiden = RSEQ; A.seqs.nahida = NSEQ; A.seqs.drake = DSEQ; A.seqs.sentinel = SSEQ; A.seqs.shroom = MSEQ;
+  const SEQS = { zhongli: ZSEQ, raiden: RSEQ, nahida: NSEQ, drake: DSEQ, sentinel: SSEQ, shroom: MSEQ };
+  A.bossFx = { sheet }; // flipbook fx for other STAGE code (stages.js 開花)
   A.bossDebug = {
     names: {
       pillar: '岩柱', pillarRing: '岩柱の囲い', resonance: '地心の共鳴', shield: '玉璋シールド', meteor: '天星', meteorRain: '天星の雨',
       iai: '瞬間移動の居合', iai3: '連続居合', slashFan: '雷の斬撃波', eye: '雷罰悪曜の眼', musou: '夢想の一太刀',
+      charge: '突進', slam: '跳ねつぶし（岩の破片）', shards: '岩の雨', beam: '目のビーム', burst: '雷のはじけ', bolts: '落雷',
+      spore: '胞子の雲（おそくなる）', stomp: 'ふみつけ', puff: '胞子の弾',
       seeds: '所聞遍計（種）', vine: '蔓の鞭', barrage: '草の弾幕', dream: '心景幻成', clones: '幻影（分身）',
     },
     setPhase(e, ph) {

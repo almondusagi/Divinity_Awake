@@ -254,7 +254,7 @@ G.debugPanel = (function () {
       el('p', { class: 'dbg-note' }, '「全部0／全部MAX」はこの出撃のあいだだけ。終わると元にもどります。')));
     b.append(sec('モラ・記録',
       row(el('span', { class: 'dbg-lb' }, '所持モラ'), num(c.mora, v => set('mora', v.trim()), 90), el('span', { class: 'dbg-note' }, '空欄=変えない（今 ' + U.fmtNum(G.save.data.mora || 0) + '）')),
-      row(chk('セーブに記録しない（撃破数・モラ・図鑑を出撃前にもどす）', c.noRecord, v => set('noRecord', v))),
+      row(chk('セーブに記録しない（撃破数・モラ・スキルブックを出撃前にもどす）', c.noRecord, v => set('noRecord', v))),
       row(chk('無敵で出撃', c.god, v => set('god', v)))));
     // presets
     const pres = ls.json(K_PRE, []);
@@ -290,6 +290,19 @@ G.debugPanel = (function () {
       })),
       row(B('全ステージクリア', () => { stages().forEach(d => UL.setCleared(d.id, true)); toast('全ステージクリア済み'); refresh(); }, 'gold'),
         B('クリア状態を全部消す', () => { stages().forEach(d => UL.setCleared(d.id, false)); toast('クリア状態をリセット'); refresh(); }))));
+    if (G.skillbook) {
+      const SB = G.skillbook;
+      /* also patch the「記録しない」snapshot, so the choice survives the end of a debug run */
+      const bookAll = on => {
+        SB.setAll(on);
+        try { const raw = ls.get(K_RESTORE); if (raw) { const st = JSON.parse(raw); if (st.full) { st.full.book = JSON.parse(JSON.stringify(G.save.data.book || {})); st.full.bookNew = {}; st.full.codex = JSON.parse(JSON.stringify(G.save.data.codex || {})); ls.set(K_RESTORE, JSON.stringify(st)); } } } catch (e) { }
+        toast(on ? 'スキルブック 全登録' : 'スキルブック 全消去'); refresh();
+      };
+      b.append(sec('スキルブック（セーブに書きこむ）',
+        el('p', { class: 'dbg-note' }, '登録 ' + SB.count() + ' / ' + SB.total() + '（進化 ' + G.evolutions.filter(e => SB.has(e.key)).length + ' / ' + G.evolutions.length + ' 達成）'),
+        row(B('スキルブック全登録', () => bookAll(true), 'gold'), B('スキルブック全消去', () => bookAll(false))),
+        el('p', { class: 'dbg-note' }, '全登録＝すべてのスキルと進化の条件が見える。全消去＝黒いシルエット（？？？）にもどす（進化の条件も かくれる）。')));
+    }
   }
   function upRow(k, lv, setLv) {
     const u = G.upgrades[k];

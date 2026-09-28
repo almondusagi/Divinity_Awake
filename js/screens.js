@@ -314,7 +314,7 @@ G.screens = (function () {
         el('div', { class: 'enter', style: D(1.0) }, sw),
         el('p', { class: 'subtitle enter', style: D(1.05) }, '神々が目覚める。冒険の始まり。'),
         menu),
-      el('div', { class: 'title-tr' }, el('div', { class: 'title-hint enter', style: D(1.8) }, el('kbd', null, '↑'), el('kbd', null, '↓'), ' えらぶ　', el('kbd', null, 'Enter'), ' けってい'), toolsBox),
+      el('div', { class: 'title-tr' }, el('div', { class: 'title-hint enter', style: D(1.8) }, el('kbd', null, '↑'), el('kbd', null, '↓'), ' 選ぶ　', el('kbd', null, 'Enter'), ' 決定'), toolsBox),
       el('div', { class: 'title-foot enter', style: D(1.7) }, '非公式ファンメイド作品　Ver ' + G.VERSION, el('br'), '原作の公式とは関係ありません'),
       el('div', { class: 'title-reset enter', style: D(1.9) }, hoverable(el('button', { class: 'g-link', type: 'button', onclick: () => { sfx('ui'); reset(); } }, 'データをリセット'))));
     // swap the ⏻ glyph if the font lacks it (keeps a consistent look)
@@ -359,7 +359,7 @@ G.screens = (function () {
     const roster = el('div', { class: 'roster' }, (G.data.roster || ['amber']).map((id, i) => {
       const c = C[id]; if (!c) return null;
       const locked = !c.implemented, cs = charSt(id), sil = !locked && cs !== 'open';
-      const b = el('button', { class: 'r-card enter-l' + (id === selChar ? ' sel' : '') + (locked ? ' locked' : '') + (sil ? ' sil ' + cs : ''), type: 'button', 'data-char': id, style: `--d:${0.1 + i * 0.07}s;--el:${(G.EL[c.element] || {}).color || '#fff'}`, 'aria-label': c.name + (locked ? '（準備中）' : sil ? '（未解放）' : '') },
+      const b = el('button', { class: 'r-card enter-l' + (id === selChar ? ' sel' : '') + (locked ? ' locked' : '') + (sil ? ' sil ' + cs : ''), type: 'button', 'data-char': id, style: `--d:${0.1 + i * 0.07}s;--el:${(G.EL[c.element] || {}).color || '#fff'}`, 'aria-label': (sil ? '？？？' : c.name) + (locked ? '（準備中）' : sil ? '（未解放）' : '') },
         el('img', { src: icon(c.portrait || id), alt: '' }), locked ? el('span', null, '準備中') : null,
         sil ? el('i', { class: 'r-lock', html: cs === 'buyable' ? '<b>!</b>' : SVG_LOCK }) : null);
       b.addEventListener('click', () => {
@@ -387,7 +387,7 @@ G.screens = (function () {
         sortieSub()));
 
     // tabbed panel
-    const TABS = [['adv', '冒険'], ['meta', '育成'], ['const', '命ノ星座'], ['relic', '聖遺物'], ['codex', '図鑑'], ['rec', '記録']];
+    const TABS = [['adv', '冒険'], ['meta', '育成'], ['const', '命ノ星座'], ['relic', '聖遺物'], ['book', 'スキルブック'], ['rec', '記録']];
     const body = el('div', { class: 'tab-body scroll' });
     const badges = {};
     const tabBtns = TABS.map(([k, label]) => {
@@ -399,16 +399,15 @@ G.screens = (function () {
     function goTab(k) {
       if (homeTab === k) return; sfx('ui'); homeTab = k;
       tabBtns.forEach(t => t.classList.toggle('on', t.dataset.tab === k));
-      if (k === 'codex') { G.save.data.codexNew = 0; try { G.save.write(); } catch (e) { } }
       renderTab(body, k); refreshBadges();
     }
     homeGo = goTab;
     function refreshBadges() {
-      const ms = metaState(), cs = consState(), nNew = G.save.data.codexNew | 0;
+      const ms = metaState(), cs = consState(), nNew = G.skillbook ? G.skillbook.newCount() : 0;
       const set = (k, txt, cls) => { const b = badges[k]; if (!b) return; const was = b.textContent; b.textContent = txt || ''; b.className = 'tab-bdg' + (txt ? ' on ' + (cls || '') : ''); if (txt && txt !== was) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); } };
       set('meta', ms.can.length ? String(ms.can.length) : '', 'gold');
       set('const', cs && cs.can ? '!' : '', 'gold');
-      set('codex', nNew ? 'NEW' : '', 'new');
+      set('book', nNew ? 'NEW' : '', 'new');
     }
     refreshBadges();
     const pnl = panel('home-panel enter-r', el('div', { class: 'tabs', role: 'tablist' }, tabBtns), body);
@@ -418,7 +417,7 @@ G.screens = (function () {
     const scr = el('div', { class: 'home', 'data-nav': '' }, top, roster, hero, pnl);
     function sortieSub() {
       const d = stg(selStage);
-      const b = el('button', { class: 'sortie-sub', type: 'button', title: 'ステージをえらぶ' }, el('img', { src: icon(d.boss), alt: '' }), el('span', null, 'STAGE ' + d.order), el('b', null, d.name), el('em', null, 'へ ▸'));
+      const b = el('button', { class: 'sortie-sub', type: 'button', title: 'ステージ選択' }, el('img', { src: icon(d.boss), alt: '' }), el('span', null, 'STAGE ' + d.order), el('b', null, d.name), el('em', null, 'へ ▸'));
       b.addEventListener('click', () => { sfx('ui'); if (homeGo) homeGo('adv'); const g = scr.querySelector('.stg-grid'); if (g) { g.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); g.classList.remove('flash'); void g.offsetWidth; g.classList.add('flash'); } });
       return hoverable(b);
     }
@@ -469,18 +468,18 @@ G.screens = (function () {
     return el('div', { class: 'stg-grid' }, stList().map((d, i) => {
       const open = stOpen(d.id), cl = stCleared(d.id), sel = d.id === selStage, rc = stRec(d.id);
       const b = el('button', { class: 'stg-card' + (sel ? ' sel' : '') + (open ? '' : ' locked') + (cl ? ' clear' : ''), type: 'button', 'data-stage': d.id,
-          style: `--d:${(0.04 * i).toFixed(2)}s;--c:${d.color || '#d3bc8e'}`, 'aria-label': 'STAGE ' + d.order + ' ' + d.name + (open ? '' : '（未解放）') },
+          style: `--d:${(0.04 * i).toFixed(2)}s;--c:${d.color || '#d3bc8e'}`, 'aria-label': 'STAGE ' + d.order + ' ' + (open ? d.name : '？？？（未解放）') },
         el('img', { class: 'stg-bg', src: 'assets/' + d.bgSmall + '.webp', alt: '' }),
         el('i', { class: 'stg-shade' }),
         el('span', { class: 'stg-no' }, 'STAGE ' + d.order),
-        el('b', { class: 'stg-name' }, d.name),
+        el('b', { class: 'stg-name' }, open ? d.name : '？？？'),
         el('span', { class: 'stg-stars', title: '強さ' }, el('small', null, '強さ'), STARS(d.stars || d.order)),
         el('span', { class: 'stg-boss' }, el('img', { src: icon(d.boss), alt: '' }), el('span', null, open || cl ? d.bossName : '？？？')),
         cl ? el('span', { class: 'stg-clear' }, 'CLEAR') : null,
         open && rc.best ? el('span', { class: 'stg-best' }, '最長 ' + U.fmtTime(rc.best)) : null,
-        open ? null : el('span', { class: 'stg-lock' }, el('i', { html: SVG_LOCK }), el('small', null, UL() ? UL().stageCond(d.id) : 'じゅんびちゅう')));
+        open ? null : el('span', { class: 'stg-lock' }, el('i', { html: SVG_LOCK }), el('small', null, UL() ? UL().stageCond(d.id) : '準備中')));
       b.addEventListener('click', () => {
-        if (!open) { sfx('denied'); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); toast(d.name + '：' + (UL() ? UL().stageCond(d.id) : 'じゅんびちゅう')); return; }
+        if (!open) { sfx('denied'); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); toast('？？？：' + (UL() ? UL().stageCond(d.id) : '準備中')); return; }
         sfx('ui'); if (selStage === d.id) return;
         selStage = d.id; saveSel();
         const scroll = body.scrollTop; home(); const nb = G.ui.root.querySelector('.tab-body'); if (nb) nb.scrollTop = scroll;
@@ -498,22 +497,22 @@ G.screens = (function () {
     const stageRow = conds.find(k => k.kind === 'stage'), moraRow = conds.find(k => k.kind === 'mora');
     const condEl = el('div', { class: 'ul-conds' },
       el('h5', null, '解放条件'),
-      stageRow ? el('div', { class: 'ul-cond' + (stageRow.ok ? ' ok' : '') }, el('i', null, stageRow.ok ? '✓' : '1'), el('span', null, stageRow.text), el('em', null, stageRow.ok ? 'たっせい！' : 'まだ')) : null,
+      stageRow ? el('div', { class: 'ul-cond' + (stageRow.ok ? ' ok' : '') }, el('i', null, stageRow.ok ? '✓' : '1'), el('span', null, stageRow.text), el('em', null, stageRow.ok ? '達成！' : 'まだ')) : null,
       moraRow ? el('div', { class: 'ul-cond' + (moraRow.ok ? ' ok' : '') }, el('i', null, moraRow.ok ? '✓' : '2'), el('span', null, el('img', { src: icon('mora'), alt: '' }), moraRow.text),
-        el('em', null, moraRow.ok ? 'たりてる！' : 'あと ' + U.fmtNum(cost - mora))) : null,
+        el('em', null, moraRow.ok ? '足りてる！' : 'あと ' + U.fmtNum(cost - mora))) : null,
       el('div', { class: 'ul-purse' }, '所持モラ ', el('img', { src: icon('mora'), alt: '' }), el('b', null, U.fmtNum(mora))));
     let close;
-    const buyBtn = btn(st === 'locked' ? '条件をクリアしよう' : can ? '解放する' : 'モラがたりない', { cls: 'primary ul-buy', icon: '✦', sfx: false, auto: can, on: () => doBuy() });
+    const buyBtn = btn(st === 'locked' ? '条件をクリアしよう' : can ? '解放する' : 'モラが足りない', { cls: 'primary ul-buy', icon: '✦', sfx: false, auto: can, on: () => doBuy() });
     buyBtn.disabled = !can;
     if (can) buyBtn.append(el('small', { class: 'ul-cost' }, el('img', { src: icon('mora'), alt: '' }), U.fmtNum(cost)));
     const foot = el('div', { class: 'g-foot' }, btn('閉じる', { icon: '✕', ic: 'no', back: true, auto: !can, on: () => close() }), buyBtn);
-    const title = el('h2', { class: 'g-head' }, el('em', null, '◆'), el('span', null, c.name), el('em', null, '◆'));
+    const title = el('h2', { class: 'g-head' }, el('em', null, '◆'), el('span', null, '？？？'), el('em', null, '◆'));   // silhouette = name hidden (owner rule)
     const pnl = panel('unlock-panel ' + st, title,
       el('div', { class: 'ul-body' },
         el('div', { class: 'ul-port', style: `--el:${elc}` }, el('i', { class: 'ul-rays' }), el('i', { class: 'ul-ring' }), img, st === 'buyable' ? null : el('i', { class: 'ul-lock', html: SVG_LOCK })),
         el('div', { class: 'ul-info' },
-          el('div', { class: 'ul-sub' }, el('span', { class: 'el-badge', style: `--el:${elc}` }, '◆ ' + ((G.EL[c.element] || {}).name || '')), el('span', { class: 'chip' }, c.weapon || ''), c.title ? el('span', { class: 'chip' }, c.title) : null),
-          el('p', { class: 'ul-blurb' }, st === 'locked' ? 'まだ 影しか見えない…。条件をクリアすると 仲間にできるよ！' : c.blurb || ''),
+          el('div', { class: 'ul-sub' }, el('span', { class: 'el-badge', style: `--el:${elc}` }, '◆ ' + ((G.EL[c.element] || {}).name || '')), el('span', { class: 'chip' }, c.weapon || '')),
+          el('p', { class: 'ul-blurb' }, st === 'locked' ? 'まだ 影しか見えない…。条件をクリアすると 仲間にできるよ！' : '条件クリア！ 解放すると 正体がわかるよ！'),
           condEl)),
       foot);
     close = openModal(pnl);
@@ -528,7 +527,8 @@ G.screens = (function () {
       pnl.querySelector('.ul-port').append(burst);
       title.querySelector('span').textContent = c.name + ' が仲間になった！';
       pnl.querySelector('.ul-blurb').textContent = c.blurb || '';
-      condEl.replaceWith(el('div', { class: 'ul-got' }, el('b', null, 'NEW!'), el('span', null, 'ホームで えらんで 出撃できるよ')));
+      if (c.title) pnl.querySelector('.ul-sub').append(el('span', { class: 'chip' }, c.title));
+      condEl.replaceWith(el('div', { class: 'ul-got' }, el('b', null, 'NEW!'), el('span', null, 'ホームで選んで 出撃できるよ')));
       foot.innerHTML = '';
       foot.append(btn('この仲間で出撃準備', { cls: 'primary', icon: '⚔', auto: true, back: true, on: () => { close(); selChar = id; saveSel(); setTimeout(() => home(), 190); } }));
       setTimeout(() => nav.focusDefault(pnl.parentNode), 60);
@@ -550,7 +550,7 @@ G.screens = (function () {
       const d = stg(selStage), rc = stRec(selStage);
       const ch = G.data.characters[selChar] || G.data.characters.amber;
       inner.append(
-        el('div', { class: 'stg-head' }, el('h4', null, 'ステージをえらぶ'), el('small', null, 'ボスをたおすと 次のステージへ')),
+        el('div', { class: 'stg-head' }, el('h4', null, 'ステージ選択'), el('small', null, 'ボスをたおすと 次のステージへ')),
         stageGrid(body),
         el('div', { class: 'stage-card', style: `--bg:url(../assets/${d.bgSmall}.webp);--c:${d.color || '#5cf2c8'}` },
           stCleared(selStage) ? el('div', { class: 'st-clear' }, 'CLEAR') : null,
@@ -571,7 +571,7 @@ G.screens = (function () {
     } else if (k === 'meta') ext(G.progressionUI && G.progressionUI.renderMeta, '育成');
     else if (k === 'const') ext(G.progressionUI && G.progressionUI.renderConstellation, '命ノ星座');
     else if (k === 'relic') ext(G.relics && G.relics.renderPanel, '聖遺物');
-    else if (k === 'codex') { try { renderCodex(inner); } catch (e) { console.error('[screens] codex', e); inner.innerHTML = ''; inner.append(soon('準備中', '図鑑 はもうすぐ登場します。')); } }
+    else if (k === 'book') { try { G.skillbook.render(inner); } catch (e) { console.error('[screens] skillbook', e); inner.innerHTML = ''; inner.append(soon('準備中', 'スキルブック はもうすぐ登場します。')); } }
     else if (k === 'rec') {
       const r = (label, v) => el('div', { class: 'rec' }, el('small', null, label), el('b', null, v));
       inner.append(el('div', { class: 'rec-grid' },
@@ -629,7 +629,7 @@ G.screens = (function () {
       const a = ms.next, c = cs;
       if (a && (!c || a.cost <= c.cost)) target = { tab: 'meta', m: a }; else if (c) target = { tab: 'const', c };
     }
-    if (!target) return el('div', { class: 'guide done' }, el('i', { class: 'gd-orb', style: '--c:#ffd24a' }, '★'), el('div', { class: 'gd-t' }, el('span', { class: 'kt' }, '強化'), el('b', null, 'ぜんぶ最大！すごい！')));
+    if (!target) return el('div', { class: 'guide done' }, el('i', { class: 'gd-orb', style: '--c:#ffd24a' }, '★'), el('div', { class: 'gd-t' }, el('span', { class: 'kt' }, '強化'), el('b', null, 'すべて最大！すごい！')));
     const can = target === pick, cost = target.m ? target.m.cost : target.c.cost, nCan = ms.can.length + (cs && cs.can ? 1 : 0);
     let o, nm, fxLine, col;
     if (target.m) {
@@ -649,38 +649,6 @@ G.screens = (function () {
       el('div', { class: 'gd-go' }, can ? [el('img', { src: icon('mora'), alt: '' }), U.fmtNum(cost), el('em', null, '強化へ ▸')] : [el('small', null, 'あと'), el('b', null, U.fmtNum(cost - mora)), el('small', null, 'モラ')]));
     card.addEventListener('click', () => { if (homeGo) homeGo(target.tab); });
     return hoverable(card);
-  }
-
-  /* ---- 図鑑: evolutions + ★5 blessings, discovered ones light up (recorded from bus events). ---- */
-  function codexMark(key) {
-    const S = G.save.data; if (!S.codex || typeof S.codex !== 'object') S.codex = {};
-    if (S.codex[key]) return; S.codex[key] = Date.now(); S.codexNew = (S.codexNew | 0) + 1;
-    try { G.save.write(); } catch (e) { }
-  }
-  G.bus.on('evolution', e => { if (e && e.key) codexMark(e.key); });
-  G.bus.on('upgrade', e => { const up = e && G.upgrades[e.key]; if (up && (up.cat === 'bless' || up.cat === 'evo')) codexMark(e.key); });
-  function renderCodex(inner) {
-    const S = G.save.data, seen = (S.codex && typeof S.codex === 'object') ? S.codex : {};
-    const evos = (G.evolutions || []).filter(e => G.upgrades[e.key]), bl = (G.blessings || []).filter(k => G.upgrades[k]);
-    const have = evos.filter(e => seen[e.key]).length + bl.filter(k => seen[k]).length, total = evos.length + bl.length;
-    const nm = k => (G.upgrades[k] && G.upgrades[k].name) || k;
-    const ic = k => icon((G.upgrades[k] && G.upgrades[k].icon) || 'crystal');
-    const plain = t => String(t || '').replace(/<[^>]+>/g, '').replace(/\n/g, ' ');
-    const card = (k, recipe, i) => {
-      const up = G.upgrades[k], got = !!seen[k];
-      return el('div', { class: 'cx-card' + (got ? ' got' : '') + (up.cat === 'bless' ? ' bless' : ''), style: `--d:${(0.03 * i).toFixed(2)}s;--el:${(G.EL[up.el] || {}).color || '#ffcf6b'}` },
-        el('div', { class: 'cx-ic' }, el('img', { src: ic(k), alt: '' }), got ? el('i', { class: 'cx-ok' }, '✓') : el('i', { class: 'cx-q' }, '?')),
-        el('div', { class: 'cx-t' }, el('b', null, up.name, up.char && G.data.characters[up.char] ? el('small', { style: 'margin-left:.4em;opacity:.75;font-weight:700' }, G.data.characters[up.char].name) : null), recipe, el('small', { class: 'cx-d' }, plain(typeof up.desc === 'function' ? up.desc(1) : up.desc))));
-    };
-    const recipeOf = e => { const req = e.requires || [e.base, e.partner], parts = [];
-      req.forEach((k, j) => { if (j) parts.push(el('i', null, '＋')); parts.push(el('span', null, el('img', { src: ic(k), alt: '' }), nm(k), el('em', null, 'MAX'))); });
-      return el('div', { class: 'cx-rc' }, parts); };
-    inner.append(
-      el('div', { class: 'cx-head' }, el('h4', null, '進化図鑑'), el('div', { class: 'cx-prog' }, el('i', { style: `width:${total ? Math.round(have / total * 100) : 0}%` })), el('b', null, `発見 ${have} / ${total}`)),
-      el('p', { class: 'cx-tip' }, '素材の強化を ぜんぶ MAX にすると、宝箱から進化が出るよ！'),
-      el('div', { class: 'cx-grid' }, evos.map((e, i) => card(e.key, recipeOf(e), i))),
-      bl.length ? el('h5', { class: 'cx-sub' }, '★5 天啓カード（レベルアップでまれに出る）') : null,
-      bl.length ? el('div', { class: 'cx-grid' }, bl.map((k, i) => card(k, el('div', { class: 'cx-rc' }, el('span', { class: 'gold' }, G.upgrades[k].short || '★5')), evos.length + i))) : null);
   }
 
   function kitRow(ic, kind, name, desc) {
@@ -799,7 +767,7 @@ G.screens = (function () {
     close = openModal(panel('conf-panel', head('データのリセット'),
       el('div', { class: 'conf-body' },
         'この端末に保存された、すべてのデータを削除します。',
-        el('div', { class: 'del-list' }, ['モラ', '育成', '命ノ星座', '聖遺物', '図鑑', '記録', '設定'].map(t => el('span', null, t))),
+        el('div', { class: 'del-list' }, ['モラ', '育成', '命ノ星座', '聖遺物', 'スキルブック', 'キャラ・ステージ解放', '記録', '設定'].map(t => el('span', null, t))),
         el('div', { class: 'warn' }, '削除したデータは元に戻せません。'),
         el('small', { style: 'color:#ece5d899' }, '「長押しで削除」を1秒おしつづけると削除されます')),
       el('div', { class: 'g-foot' }, cancel, del)));
@@ -851,9 +819,9 @@ G.screens = (function () {
       stat('攻撃力', U.fmtNum(S.atk || 0)), stat('最大HP', U.fmtNum(p.maxHp)),
       stat('防御力', U.fmtNum(S.def || 0)), stat('移動速度', (S.speed || 0).toFixed(1)),
       stat('会心率', pct(S.critRate)), stat('会心ダメージ', pct(S.critDmg)),
-      stat('攻撃速度', pct(S.haste || 1)), stat('元素チャージ', pct(S.recharge || 1)),
+      stat('攻撃速度', pct(S.haste || 1)), stat('元素チャージ効率', pct(S.recharge || 1)),
       stat('攻撃範囲', pct(S.areaMul || 1)), stat('与ダメージ', '+' + pct(S.dmgBonus)),
-      stat('クールダウン', '-' + pct(S.cdr)), stat('回収範囲', (S.pickup || 0).toFixed(1)));
+      stat('クールタイム', '-' + pct(S.cdr)), stat('回収範囲', (S.pickup || 0).toFixed(1)));
     let close;
     const resume = () => { close(); G.game.resume('menu'); sfx('ui'); };
     const chip = (img, text) => el('span', { class: 'chip' }, img ? el('img', { src: icon(img), alt: '' }) : null, text);
@@ -866,8 +834,18 @@ G.screens = (function () {
         el('div', { class: 'pb-col' }, el('h4', null, 'ステータス'), stats)),
       el('div', { class: 'g-foot' },
         btn('再開', { icon: '▶', ic: 'ok', auto: true, back: true, sfx: false, on: resume }),
+        btn('スキルブック', { icon: '✦', cls: 'pz-book', on: () => skillBook(R.charId) }),
         btn('設定', { icon: '⚙', on: () => settings('pause') }),
         btn('モラを持って帰還', { icon: '⌂', on: () => retreat(close) }))));
+  }
+  /** スキルブック as a modal (pause menu: the run stays paused; 閉じる / Esc returns to the pause menu) */
+  function skillBook(charId) {
+    if (!G.skillbook) return;
+    const body = el('div', { class: 'scroll book-scroll' });
+    let close;
+    const back = btn('閉じる', { icon: '✕', ic: 'no', back: true, auto: true, on: () => close() });
+    close = openModal(panel('book-panel', body, el('div', { class: 'g-foot' }, back)));
+    try { G.skillbook.render(body, { charId }); } catch (e) { console.error('[screens] skillbook', e); body.append(soon('準備中', 'スキルブック はもうすぐ登場します。')); }
   }
   /** pause-menu build column: PROGRESSION's renderBuild (equipment + evolution recipes) when available, else our list */
   function buildCol(R, fallback) {
@@ -938,7 +916,7 @@ G.screens = (function () {
     const nu = kind === 'victory' && UL() ? UL().newlyUnlocked() : { stages: [], chars: [] };
     const unlockLine = nu.stages.length || nu.chars.length ? el('div', { class: 'res-unlock' },
       nu.stages.map(id => el('span', { class: 'ru-chip' }, el('i', { html: SVG_LOCK }), el('b', null, 'NEW'), stg(id).name + ' 解放！')),
-      nu.chars.length ? el('span', { class: 'ru-chip ch' }, nu.chars.map(id => el('img', { src: icon((G.data.characters[id] || {}).portrait || id), alt: '' })), el('b', null, 'NEW'), nu.chars.map(id => G.data.characters[id].name).join('・') + ' が仲間にできる！') : null) : null;
+      nu.chars.length ? el('span', { class: 'ru-chip ch' }, nu.chars.map(id => el('img', { src: icon((G.data.characters[id] || {}).portrait || id), alt: '' })), el('b', null, 'NEW'), '新しい仲間 ' + nu.chars.length + '人 を解放できる！') : null) : null;
     again.style.cssText = 'min-width:220px;letter-spacing:.2em';
     const low = S.settings.reducedFx;
     const confetti = el('div', { class: 'confetti', 'aria-hidden': 'true' });
@@ -974,7 +952,7 @@ G.screens = (function () {
   }
 
   /* ============================== wiring ============================== */
-  const api = { title, home, settings, reset, quit, pause, results, toast, gust, nav };
+  const api = { title, home, settings, reset, quit, pause, results, toast, gust, nav, skillBook };
   G.bus.on('requestPause', () => pause());
   G.bus.on('runEnd', R => setTimeout(() => { if (G.run === R) results(R); }, R.victory ? 1600 : R.endReason === 'retreat' ? 250 : 1300));
   G.bus.on('saveReset', () => { homeTab = 'adv'; });
