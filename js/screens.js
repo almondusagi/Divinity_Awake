@@ -207,6 +207,7 @@ G.screens = (function () {
     addEventListener('keydown', e => {
       const rt = root(); if (!rt) return;
       const c = e.code, a = document.activeElement, isRange = a && a.type === 'range';
+      if (a && (a.isContentEditable || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && !isRange && a.type !== 'checkbox'))) return; // typing a name (聖遺物プリセット…)
       let used = true;
       if (c === 'ArrowUp' || c === 'KeyW') move(0, -1);
       else if (c === 'ArrowDown' || c === 'KeyS') move(0, 1);
@@ -509,7 +510,8 @@ G.screens = (function () {
         el('div', { class: 'hero-name enter-l', style: '--d:.25s' },
           el('div', { class: 'stars' }, '★★★★'),
           el('h3', null, ch.name),
-          el('div', { class: 'sub' }, el('span', { class: 'el-badge', style: `--el:${elInfo.color}` }, '◆ ' + elInfo.name), el('span', { class: 'chip' }, ch.weapon || ''), ch.title ? el('span', { class: 'chip' }, ch.title) : null))),
+          el('div', { class: 'sub' }, el('span', { class: 'el-badge', style: `--el:${elInfo.color}` }, '◆ ' + elInfo.name), el('span', { class: 'chip' }, ch.weapon || ''), ch.title ? el('span', { class: 'chip' }, ch.title) : null),
+          statBtn(ch))),
       el('div', { class: 'sortie enter', style: '--d:.4s' },
         btn('出撃', { cls: 'primary', icon: '⚔', auto: true, sfx: false, on: e => { if (busy) return; fixSel(); pressBurst(e && e.currentTarget); setTimeout(() => gust(() => G.startRun(selChar, selStage)), 120); } }),
         sortieSub()));
@@ -811,6 +813,27 @@ G.screens = (function () {
     const kit = kitRows(c);
     return Object.assign(base, { title: c.name, sub: base.sub + (c.title ? ' ・ ' + I.esc(c.title) : ''), lv: c.implemented ? (id === selChar ? '✔ 選択中' : '') : '準備中',
       body: (c.blurb ? I.sec('', I.esc(c.blurb)) : '') + I.sec('わざ', kit.map(r => '<b>' + I.esc(r[2]) + '</b>　<small style="display:inline;color:#ece5d8aa">' + I.esc(r[1].split('　')[0]) + '</small>').join('<br>')) });
+  }
+  /* ---- ステータス: the stats a run would start with (G.progression.previewStats — no run is started) ---- */
+  function statBtn(ch) {
+    if (!G.inspect || !G.progression || !G.progression.previewStats) return null;
+    const b = el('button', { class: 'st-btn', type: 'button', 'data-stat': ch.id, title: 'いまのステータス（星図・命ノ星座・聖遺物こみ）' },
+      el('i', { html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>' }), 'ステータス');
+    b.addEventListener('click', () => { sfx('ui'); inspectStats(ch.id, b); });
+    return hoverable(b);
+  }
+  function statInspect(id) {
+    const I = G.inspect, P = G.progression, c = G.data.characters[id], E = G.EL[c.element] || {};
+    const rows = P.statRows(P.previewStats(id), id), rb = P.statRows(P.previewStats(id, { bare: true }), id);
+    const grid = rows.map((x, i) => { const up = rb[i] && rb[i].text !== x.text;
+      return `<div class="st-row${up ? ' up' : ''}" data-k="${x.k}"><span>${I.esc(x.name)}</span><b>${I.esc(x.text)}</b>${up ? `<small>基本 ${I.esc(rb[i].text)}</small>` : ''}</div>`; }).join('');
+    return { img: icon(c.portrait || id), photo: true, color: E.color || '#d3bc8e', title: c.name, sub: 'ステータス ・ 出撃するときの値（Lv1）', lv: '命ノ星座 C' + P.constellationLevel(id),
+      body: `<div class="st-grid">${grid}</div>` + I.sec('', '<small>天賦の星図・命ノ星座・聖遺物をふくめた値。<b style="color:#8ff7b0">緑</b>は 強化で変わったもの（小さい数字は 強化なしの基本値）。冒険中に拾う強化は ふくみません。</small>') };
+  }
+  function inspectStats(id, from) {
+    const ids = (G.data.roster || ['amber']).filter(k => G.data.characters[k] && G.data.characters[k].implemented && charSt(k) === 'open');
+    if (ids.indexOf(id) < 0) ids.unshift(id);
+    G.inspect.open({ index: Math.max(0, ids.indexOf(id)), from, list: ids.map(k => () => Object.assign(statInspect(k), { from: k === id ? from : null })) });
   }
   function inspectChars(id, from) {
     const ids = (G.data.roster || ['amber']).filter(k => G.data.characters[k]);

@@ -3,13 +3,16 @@
    The mode is remembered in localStorage ('mondo_debug' = '1') until it is switched off again.
    While debug mode is on, a small「DEBUG」button stays at the bottom of the screen to reopen the panel.
    Opening the panel pauses the run (G.game.pause('debug')).
-   Tabs: 出撃 (debug sortie with custom start conditions + presets) · 進化 (evolution checker) · 強化 · 敵・ボス · 時間 · プレイヤー · 表示.
+   Tabs: 出撃 (two views: ⚔ 出撃の設定 = debug sortie with custom start conditions + presets, only for that run ·
+         💾 セーブ編集 = edit the REAL save without a run — Mora, star map nodes, constellations, unlocks, stage clears,
+         skill book, relics — applied with「この設定をセーブに反映」(confirm + one backup:「反映前のセーブに戻す」)) · 進化 (evolution checker) · 強化 · 敵・ボス · 時間 · プレイヤー · 表示.
    Nothing here runs game logic while debug mode is off: every hook (AI stop, spawn stop, slow motion, hitboxes) is installed
    lazily the first time it is used. Helpers live in js/debug.js (G.debug.*). */
 'use strict';
 G.debugPanel = (function () {
   const el = G.ui.el, U = G.u;
   const K_ON = 'mondo_debug', K_PRE = 'mondo_debug_presets', K_CFG = 'mondo_debug_cfg', K_RESTORE = 'mondo_debug_restore';
+  const K_BAK = 'mondo_debug_backup', K_VIEW = 'mondo_debug_view';   // backup of the save before the last「セーブに反映」/ sortie tab view
   const ls = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } },
@@ -19,6 +22,9 @@ G.debugPanel = (function () {
   let on = ls.get(K_ON) === '1';
   let wrap = null, body = null, tabsBar = null, head = null, fab = null, overlay = null;
   let isOpen = false, tab = 'evo', refresher = null, openedAt = 0, lastTab = null;
+  let sv = ls.get(K_VIEW) === 'save' ? 'save' : 'sortie';   // 出撃タブの表示: 'sortie'（出撃の設定）| 'save'（セーブ編集）
+  let D = null, askNode = null, renaming = -1, metaChar = 'amber', statChar = 'amber';
+  const RA = { slot: 'all', set: 'wind', rarity: 5 };        // セーブ編集: relic to add
   // persistent toggles (memory only)
   const T = { god: false, noCd: false, infEnergy: false, hitbox: false, overlay: false, skipEvents: true, closeOnAttack: true, lvCards: true, speed: 1, bossKind: 'ruin', bossPhase: 1, enemyKind: 'mote', enemyN: 5, champion: false };
   const sfx = n => { try { G.audio.sfx(n); } catch (e) { } };
@@ -162,7 +168,7 @@ G.debugPanel = (function () {
     tabsBar = el('div', { class: 'dbg-tabs' });
     body = el('div', { class: 'dbg-body' });
     pnl.append(top, tabsBar, body); wrap.append(pnl);
-    wrap.addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Escape') close(); });
+    wrap.addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Escape') { if (askNode) closeAsk(); else close(); } });
     wrap.addEventListener('keyup', e => e.stopPropagation());
     wrap.addEventListener('pointerdown', e => { if (e.target === wrap) close(); });
     document.body.append(wrap);
@@ -175,11 +181,14 @@ G.debugPanel = (function () {
     if (t) tab = t;
     if (!inRun()) tab = 'sortie';
     isOpen = true; openedAt = performance.now(); wrap.classList.add('show');
+    if (!D || !diffs().length) D = snapDraft();   // the save may have changed since (purchases, runs) — keep only unapplied edits
+    const uc = G.save.data.uiSel && G.save.data.uiSel.char;
+    if (uc && G.data.characters[uc]) { metaChar = uc; statChar = uc; }
     if (G.run && !G.run.over) G.game.pause('debug');
     render();
   }
   function close(silent) {
-    if (!isOpen) return; isOpen = false;
+    if (!isOpen) return; isOpen = false; closeAsk(); renaming = -1;
     if (wrap) { wrap.classList.remove('show'); const a = document.activeElement; if (a && wrap.contains(a)) a.blur(); }
     if (G.run) G.game.resume('debug');
     refresher = null;
@@ -217,18 +226,26 @@ G.debugPanel = (function () {
     head.textContent = R ? `${charName(R.charId)}  ⏱${fmtT(R.time)}  Lv${R.player.level}  敵${R.enemies.filter(e => !e.dead).length}  ${Math.round(G.fps)}fps` : `画面: ${G.scene}（出撃前）`;
   }
 
-  /* ---------------- 出撃 ---------------- */
+  /* ---------------- 出撃（⚔ 出撃の設定 ／ 💾 セーブ編集） ---------------- */
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const lb = t => el('span', { class: 'dbg-lb' }, t);
   function rSortie(b) {
+    const run = inRun();
+    b.append(el('div', { class: 'dbg-mode', role: 'tablist' },
+      B(el('span', null, el('b', null, '⚔ 出撃の設定'), el('small', null, 'この出撃のあいだだけ')), () => { sv = 'sortie'; ls.set(K_VIEW, sv); render(); }, sv === 'sortie' ? 'on' : ''),
+      B(el('span', null, el('b', null, '💾 セーブ編集'), el('small', null, '出撃しないで 実際のセーブを書きかえる')), () => { sv = 'save'; ls.set(K_VIEW, sv); render(); }, (sv === 'save' ? 'on ' : '') + 'save')));
+    if (sv === 'save') { rSave(b, run); return; }
     const c = cfg, g = keysFor(c.char);
     const set = (k, v) => { c[k] = v; saveCfg(); };
     const lvOf = k => c.levels[k] | 0;
     const setLv = (k, v) => { const m = G.upgrades[k].max; v = Math.max(0, Math.min(m, v | 0)); if (v) c.levels[k] = v; else delete c.levels[k]; saveCfg(); render(); };
+    b.append(el('p', { class: 'dbg-note' }, 'ここの設定は「⚔ この条件で出撃」した その冒険のあいだだけ。出撃しないでモラや星図を変えるなら「💾 セーブ編集」へ。'));
     b.append(sec('キャラ（ロック中でも出撃できる）', el('div', { class: 'dbg-seg' }, G.data.roster.map(id => B(charName(id) + (G.unlocks && G.unlocks.charState(id) !== 'open' ? ' 🔒' : ''), () => { set('char', id); render(); }, c.char === id ? 'on' : '')))));
     b.append(sec('ステージ（未解放でも出撃できる）', el('div', { class: 'dbg-seg' }, stages().map(d => B(d.order + '. ' + d.name + (d.implemented === false ? '（未実装）' : ''), () => { if (d.implemented === false) { toast(d.name + ' はまだ G.data.stages にありません', true); return; } set('stage', d.id); render(); }, (c.stage || 'mondstadt') === d.id ? 'on' : '')))));
     b.append(sec('開始時刻・レベル',
-      row(el('span', { class: 'dbg-lb' }, '時刻'), num(c.time, v => { set('time', v); render(); }, 70),
+      row(lb('時刻'), num(c.time, v => { set('time', v); render(); }, 70),
         ...[['0:00', 0], ['2:55', 175], ['4:50', 290], ['5:00', 300], ['9:50', 590], ['10:00', 600]].map(([l]) => B(l, () => { set('time', l); render(); }, c.time === l ? 'on sm' : 'sm'))),
-      row(el('span', { class: 'dbg-lb' }, 'レベル'), num(c.level, v => { set('level', Math.max(1, parseInt(v) || 1)); render(); }, 60),
+      row(lb('レベル'), num(c.level, v => { set('level', Math.max(1, parseInt(v) || 1)); render(); }, 60),
         ...[1, 10, 20, 40].map(n => B('Lv' + n, () => { set('level', n); render(); }, c.level === n ? 'on sm' : 'sm')))));
     // upgrades
     const lau = g.launcher.filter(k => lvOf(k) > 0);
@@ -249,61 +266,257 @@ G.debugPanel = (function () {
         chk(u.name, c.evolved[e.key], v => { if (v) c.evolved[e.key] = true; else delete c.evolved[e.key]; saveCfg(); render(); }),
         B('素材MAX', () => { for (const k of e.requires) c.levels[k] = G.upgrades[k].max; saveCfg(); render(); }, 'sm', e.requires.map(k => G.upgrades[k].name).join('＋')));
     }))));
-    b.append(sec('恒久強化（天賦の星図・命ノ星座）',
-      seg([['keep', '今のまま'], ['zero', '全部0'], ['max', '全部MAX']], c.meta, v => set('meta', v)),
-      el('p', { class: 'dbg-note' }, '「全部0／全部MAX」はこの出撃のあいだだけ。終わると元にもどります。')));
+    b.append(sec('恒久強化（天賦の星図・命ノ星座）— この出撃のあいだだけ',
+      seg([['keep', '今のまま'], ['zero', '全部0（出撃中だけ）'], ['max', '全部MAX（出撃中だけ）']], c.meta, v => set('meta', v)),
+      el('p', { class: 'dbg-note' }, '「全部0／全部MAX」はこの出撃のあいだだけ。終わると元にもどります。ずっと変えるなら「💾 セーブ編集」。')));
     b.append(sec('モラ・記録',
-      row(el('span', { class: 'dbg-lb' }, '所持モラ'), num(c.mora, v => set('mora', v.trim()), 90), el('span', { class: 'dbg-note' }, '空欄=変えない（今 ' + U.fmtNum(G.save.data.mora || 0) + '）')),
+      row(lb('出撃時のモラ'), num(c.mora, v => set('mora', v.trim()), 90), el('span', { class: 'dbg-note' }, '出撃するときセーブのモラをこの値にする。空欄=変えない（今 ' + U.fmtNum(G.save.data.mora || 0) + '）')),
       row(chk('セーブに記録しない（撃破数・モラ・スキルブックを出撃前にもどす）', c.noRecord, v => set('noRecord', v))),
       row(chk('無敵で出撃', c.god, v => set('god', v)))));
-    // presets
-    const pres = ls.json(K_PRE, []);
-    b.append(sec('プリセット', el('div', { class: 'dbg-grid' }, [0, 1, 2, 3, 4].map(i => {
-      const p = pres[i];
-      return el('div', { class: 'dbg-up' }, el('span', { class: 'dbg-pn' }, p ? p.name : '（空き）'),
-        B('保存', () => { const q = ls.json(K_PRE, []); q[i] = { name: charName(cfg.char) + ' ' + cfg.time + ' Lv' + cfg.level, cfg: JSON.parse(JSON.stringify(cfg)) }; ls.set(K_PRE, JSON.stringify(q)); toast('プリセット' + (i + 1) + 'に保存'); render(); }, 'sm'),
-        p ? B('読込', () => { cfg = Object.assign(defCfg(), p.cfg); saveCfg(); toast('読込: ' + p.name); render(); }, 'sm') : null);
-    }))));
+    rPresets(b);
     b.append(el('div', { class: 'dbg-go' }, B('⚔ この条件で出撃', () => sortie(cfg), 'go')));
-    if (G.unlocks) rUnlocks(b);
   }
-  /** キャラ解放 / ステージクリア状態 — writes the real save (not undone by「記録しない」) */
-  function rUnlocks(b) {
-    const UL = G.unlocks, refresh = () => { render(); if (G.scene === 'home' && G.screens) { const tb = document.querySelector('#ui .tab-body'), y = tb ? tb.scrollTop : 0; G.screens.home(); const nb = document.querySelector('#ui .tab-body'); if (nb) nb.scrollTop = y; } };
-    b.append(sec('キャラ解放（セーブに書きこむ）',
-      el('div', { class: 'dbg-grid' }, G.data.roster.filter(id => G.data.characters[id].unlock).map(id => {
-        const st = UL.charState(id);
-        return el('div', { class: 'dbg-up' + (st === 'open' ? ' max' : st === 'buyable' ? ' has' : '') }, el('span', { class: 'dbg-un' }, charName(id)),
-          el('span', { class: 'dbg-tag' }, CH_STATE[st]),
-          B('解放', () => { UL.setChar(id, true); toast(charName(id) + ' 解放'); refresh(); }, st === 'open' ? 'sm on' : 'sm'),
-          B('ロック', () => { UL.setChar(id, false); toast(charName(id) + ' をロック（' + CH_STATE[UL.charState(id)] + '）'); refresh(); }, st !== 'open' ? 'sm on' : 'sm'));
-      })),
-      row(B('全キャラ解放', () => { G.data.roster.forEach(id => UL.setChar(id, true)); toast('全キャラ解放'); refresh(); }, 'gold'),
-        B('全キャラロック', () => { G.data.roster.forEach(id => UL.setChar(id, false)); toast('全キャラをロック'); refresh(); })),
-      el('p', { class: 'dbg-note' }, 'ロック＝購入前にもどす。ステージ1がクリア済みなら「購入待ち」、未クリアなら「ロック（シルエット）」になる。')));
-    b.append(sec('ステージクリア状態（セーブに書きこむ）',
-      el('div', { class: 'dbg-grid' }, stages().map(d => {
-        const cl = UL.isCleared(d.id);
-        return el('div', { class: 'dbg-up' + (cl ? ' max' : '') }, el('span', { class: 'dbg-un' }, d.order + '. ' + d.name),
-          el('span', { class: 'dbg-tag' }, cl ? 'クリア済' : UL.stageOpen(d.id) ? '挑戦可' : '未解放'),
-          B(cl ? 'クリアを消す' : 'クリア済にする', () => { UL.setCleared(d.id, !cl); refresh(); }, 'sm'));
-      })),
-      row(B('全ステージクリア', () => { stages().forEach(d => UL.setCleared(d.id, true)); toast('全ステージクリア済み'); refresh(); }, 'gold'),
-        B('クリア状態を全部消す', () => { stages().forEach(d => UL.setCleared(d.id, false)); toast('クリア状態をリセット'); refresh(); }))));
+
+  /** プリセット: 5 slots — 保存 / 読込 / 上書き / 名前の変更（その場で入力）/ 削除（確認つき） */
+  function rPresets(b) {
+    const pres = ls.json(K_PRE, []), put = q => ls.set(K_PRE, JSON.stringify(q));
+    const autoName = () => charName(cfg.char) + ' ' + cfg.time + ' Lv' + cfg.level;
+    const startRename = i => { renaming = i; render(); const n = body.querySelector('.dbg-pin'); if (n) { try { n.focus({ preventScroll: true }); n.select(); } catch (e) { } } };
+    const grid = el('div', { class: 'dbg-pres' }, [0, 1, 2, 3, 4].map(i => {
+      const p = pres[i];
+      if (!p) return el('div', { class: 'dbg-up dbg-pre empty', 'data-slot': i + 1 }, el('b', { class: 'dbg-pno' }, i + 1), el('span', { class: 'dbg-pn' }, '（空き）'),
+        B('保存', () => { const q = ls.json(K_PRE, []); q[i] = { name: autoName(), cfg: clone(cfg) }; put(q); toast('プリセット' + (i + 1) + 'に保存'); render(); }, 'sm gold'));
+      let name;
+      if (renaming === i) {
+        name = el('input', { class: 'dbg-in dbg-pin', type: 'text', value: p.name, maxlength: '30', enterkeyhint: 'done', 'aria-label': 'プリセット' + (i + 1) + 'の名前' });
+        let done = false;
+        const commit = ok => {
+          if (done) return; done = true;
+          const q = ls.json(K_PRE, []), v = name.value.trim().slice(0, 30);
+          if (ok && q[i] && v && v !== q[i].name) { q[i].name = v; put(q); toast('名前を「' + v + '」に変更'); }
+          renaming = -1; render();
+        };
+        name.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') { e.preventDefault(); commit(false); } });
+        name.addEventListener('blur', () => setTimeout(() => commit(true), 0));
+      } else name = el('button', { class: 'dbg-pn dbg-pnb', type: 'button', title: 'タップで名前を変える', onclick: () => startRename(i) }, p.name);
+      return el('div', { class: 'dbg-up dbg-pre', 'data-slot': i + 1 }, el('b', { class: 'dbg-pno' }, i + 1), name,
+        B('読込', () => { cfg = Object.assign(defCfg(), clone(p.cfg)); saveCfg(); toast('読込: ' + p.name); render(); }, 'sm'),
+        B('上書き', () => ask('プリセットを上書き', '「' + p.name + '」を いまの設定（' + autoName() + '）で上書きします。名前はそのまま。', null, '上書きする', () => {
+          const q = ls.json(K_PRE, []); q[i] = { name: (q[i] && q[i].name) || p.name, cfg: clone(cfg) }; put(q); toast('プリセット' + (i + 1) + 'を上書き'); render();
+        }), 'sm'),
+        B('✎', () => startRename(i), 'sm', '名前を変える'),
+        B('削除', () => ask('プリセットを削除', '「' + p.name + '」を削除します。元にはもどせません。', null, '削除する', () => {
+          const q = ls.json(K_PRE, []); q[i] = null; while (q.length && !q[q.length - 1]) q.pop(); put(q); toast('プリセット' + (i + 1) + 'を削除'); render();
+        }, true), 'sm warn'));
+    }));
+    b.append(sec('プリセット（出撃の設定）', grid, el('p', { class: 'dbg-note' }, '名前をタップ（または ✎）でその場で変更 — Enter／ほかをタップで決定、Esc で取り消し。')));
+  }
+
+  /* ---------------- 💾 セーブ編集: a draft of the real save, written only by「この設定をセーブに反映」 ---------------- */
+  const unlockable = () => G.data.roster.filter(id => G.data.characters[id] && G.data.characters[id].unlock);
+  const metaShared = () => (G.data.metaOrder || Object.keys(G.data.meta)).filter(k => G.data.meta[k] && !G.data.meta[k].char);
+  const metaOfChar = id => Object.keys(G.data.meta).filter(k => G.data.meta[k].char === id);
+  function metaName(k, charId) {
+    const d = G.data.meta[k] || {};
+    if (d.char) return charName(d.char) + '・' + d.name;
+    const t = charId && G.progression.metaDef ? G.progression.metaDef(k, charId) : d;
+    return (t && t.name) || d.name || k;
+  }
+  function snapDraft() {
+    const S = G.save.data, UL = G.unlocks, M = S.meta || {};
+    const d = { mora: Math.max(0, Math.floor(S.mora || 0)), meta: {}, cons: {}, chars: {}, cleared: {}, book: 'keep', relAdd: [], relEquip: D ? D.relEquip !== false : true, relClear: false, unopened: G.relics ? G.relics.data().unopened : 0 };
+    for (const k in G.data.meta) d.meta[k] = M[k] | 0;
+    for (const id of G.data.roster) d.cons[id] = G.progression.constellationLevel(id);
+    if (UL) { for (const id of unlockable()) d.chars[id] = UL.charState(id) === 'open'; for (const s of stages()) d.cleared[s.id] = UL.isCleared(s.id); }
+    return d;
+  }
+  /** human-readable list of what「反映」would change */
+  function diffs() {
+    if (!D) return [];
+    const B0 = snapDraft(), out = [], f = U.fmtNum;
+    if (D.mora !== B0.mora) out.push('所持モラ ' + f(B0.mora) + ' → ' + f(D.mora));
+    const mk = Object.keys(D.meta).filter(k => (D.meta[k] | 0) !== (B0.meta[k] | 0));
+    if (mk.length) out.push('天賦の星図 ' + mk.length + 'か所（' + mk.slice(0, 4).map(k => metaName(k) + ' ' + B0.meta[k] + '→' + D.meta[k]).join('、') + (mk.length > 4 ? ' …' : '') + '）');
+    for (const id in D.cons) if (D.cons[id] !== B0.cons[id]) out.push('命ノ星座 ' + charName(id) + ' C' + B0.cons[id] + ' → C' + D.cons[id]);
+    for (const id in D.chars) if (D.chars[id] !== B0.chars[id]) out.push('キャラ解放 ' + charName(id) + ' → ' + (D.chars[id] ? '解放' : 'ロック'));
+    for (const id in D.cleared) if (D.cleared[id] !== B0.cleared[id]) out.push('ステージ ' + stName(id) + ' → ' + (D.cleared[id] ? 'クリア済' : '未クリア'));
+    if (D.book !== 'keep') out.push('スキルブック → ' + (D.book === 'all' ? '全登録' : '全消去'));
+    if (D.relClear) out.push('聖遺物 → 持っているものを全部消す');
+    if (D.relAdd.length) out.push('聖遺物 +' + D.relAdd.length + '個 追加' + (D.relEquip ? '（装備する）' : ''));
+    if (D.unopened !== B0.unopened) out.push('未開封の聖遺物 ' + B0.unopened + ' → ' + D.unopened);
+    return out;
+  }
+  const dState = id => { const u = G.data.characters[id].unlock; return D.chars[id] ? 'open' : (!u.stage || D.cleared[u.stage]) ? 'buyable' : 'locked'; };
+  const hm = t => { const d = new Date(t); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  function refreshHome() {
+    if (G.scene !== 'home' || !G.screens || !G.screens.home) return;
+    const tb = document.querySelector('#ui .tab-body'), y = tb ? tb.scrollTop : 0;
+    G.screens.home(); const nb = document.querySelector('#ui .tab-body'); if (nb) nb.scrollTop = y;
+  }
+  function afterSave() { render(); try { G.bus.emit('moraChange', G.save.data.mora); } catch (e) { } refreshHome(); }
+  function applySave() {
+    if (inRun()) { toast('出撃中はセーブ編集を反映できません（ホームかタイトルで）', true); return; }
+    const list = diffs();
+    if (!list.length) { toast('変更はありません', true); return; }
+    ask('セーブデータが書き換わります', '次の内容を 実際のセーブに書きこみます（出撃はしません）。反映前のセーブを1つだけ残すので「↩ 反映前のセーブに戻す」で戻せます。', list, '💾 反映する', () => {
+      const S = G.save.data, UL = G.unlocks, B0 = snapDraft();
+      ls.set(K_BAK, JSON.stringify({ at: Date.now(), n: list.length, data: S }));
+      S.mora = Math.max(0, Math.floor(+D.mora || 0));
+      const M = Object.assign({}, S.meta || {});
+      for (const k in D.meta) { const v = U.clamp(D.meta[k] | 0, 0, G.data.meta[k].max); if (v > 0) M[k] = v; else delete M[k]; }
+      S.meta = M;
+      for (const id in D.cons) if (D.cons[id] !== B0.cons[id]) G.progression.setConstellation(id, D.cons[id]);
+      if (UL) {
+        for (const id in D.cleared) if (D.cleared[id] !== B0.cleared[id]) UL.setCleared(id, D.cleared[id]);
+        for (const id in D.chars) if (D.chars[id] !== B0.chars[id]) UL.setChar(id, D.chars[id]);
+      }
+      if (G.relics) {
+        const r = G.relics.data();
+        if (D.relClear) { r.owned = []; r.equipped = {}; }
+        for (const p of D.relAdd) { p.id = r.nextId++; r.owned.push(p); if (D.relEquip) r.equipped[p.slot] = p.id; }
+        r.unopened = Math.max(0, D.unopened | 0);
+      }
+      G.save.write();
+      if (D.book !== 'keep' && G.skillbook) G.skillbook.setAll(D.book === 'all');
+      D = snapDraft(); afterSave(); toast('セーブに反映しました（' + list.length + '件）');
+    });
+  }
+  function restoreBackup() {
+    const bk = ls.json(K_BAK, null);
+    if (!bk || !bk.data) { toast('戻せるセーブがありません', true); return; }
+    if (inRun()) { toast('出撃中は戻せません（ホームかタイトルで）', true); return; }
+    ask('反映前のセーブに戻します', hm(bk.at) + ' に「セーブに反映」する前の状態にもどします。そのあとで変わった モラ・記録・聖遺物なども もどります（設定＝音量などはそのまま）。', null, '↩ 戻す', () => {
+      const S = G.save.data, settings = S.settings;
+      for (const k of Object.keys(S)) delete S[k];
+      Object.assign(S, bk.data); S.settings = settings;
+      G.save.write(); ls.del(K_BAK);
+      if (G.unlocks && G.unlocks.migrate) { try { G.unlocks.migrate(); } catch (e) { } }
+      D = snapDraft(); afterSave(); toast('反映前のセーブに戻しました');
+    }, true);
+  }
+  G.bus.on('saveReset', () => { ls.del(K_BAK); D = null; });
+
+  /** a level row: name · − · lv/max · + · MAX */
+  function lvRow(name, lv, max, setLv, cls, title) {
+    return el('div', { class: 'dbg-up ' + (cls || '') + (lv >= max ? ' max' : lv > 0 ? ' has' : '') },
+      el('span', { class: 'dbg-un', title: title || false }, name),
+      B('−', () => setLv(lv - 1), 'pm'), el('b', { class: 'dbg-lv' }, lv + '/' + max), B('+', () => setLv(lv + 1), 'pm'),
+      B('MAX', () => setLv(max), 'sm'));
+  }
+  const charSeg = (cur, set) => el('div', { class: 'dbg-seg' }, G.data.roster.map(id => B(charName(id), () => { set(id); render(); }, cur === id ? 'on sm' : 'sm')));
+
+  function rSave(b, run) {
+    if (!D) D = snapDraft();
+    const list = diffs(), bk = ls.json(K_BAK, null), f = U.fmtNum;
+    b.append(el('div', { class: 'dbg-sum save' + (run ? ' bad' : '') },
+      run ? '⚠ 出撃中は反映できません（ホームかタイトルでひらく）。' : 'ここで変えたものは「💾 この設定をセーブに反映」を押したときだけ、実際のセーブに書きこまれます（出撃しません）。',
+      el('br'), list.length ? el('b', null, '未反映の変更 ' + list.length + '件') : '未反映の変更はありません',
+      bk ? el('span', { class: 'dbg-bk' }, '　／　反映前のセーブ: ' + hm(bk.at) + ' のものを保存中') : null,
+      list.length ? el('ul', { class: 'dbg-dl' }, list.map(t => el('li', null, t))) : null));
+    // Mora
+    const moraIn = num(D.mora, v => { D.mora = Math.max(0, Math.floor(+String(v).replace(/[^\d.]/g, '') || 0)); render(); }, 110);
+    b.append(sec('所持モラ',
+      row(lb('モラ'), moraIn, ...[0, 10000, 100000, 1000000].map(n => B(f(n), () => { D.mora = n; render(); }, D.mora === n ? 'on sm' : 'sm')),
+        B('+50,000', () => { D.mora += 50000; render(); }, 'sm')),
+      el('p', { class: 'dbg-note' }, 'いまのセーブ ' + f(G.save.data.mora || 0) + ' モラ')));
+    // star map
+    const setM = (k, v) => { D.meta[k] = U.clamp(v | 0, 0, G.data.meta[k].max); render(); };
+    const allM = (keys, max) => { for (const k of keys) D.meta[k] = max ? G.data.meta[k].max : 0; render(); };
+    const allKeys = Object.keys(G.data.meta);
+    const mcKeys = metaOfChar(metaChar), mcName = (G.data.metaChar && G.data.metaChar[metaChar] || {}).name || '専用の星';
+    b.append(sec('天賦の星図（ノードごとのLv）',
+      row(B('星図 全部0', () => allM(allKeys, false), 'sm'), B('星図 全部MAX', () => allM(allKeys, true), 'sm gold'),
+        B('共通の星だけMAX', () => allM(metaShared(), true), 'sm'), B('全キャラの専用の星MAX', () => allM(allKeys.filter(k => G.data.meta[k].char), true), 'sm')),
+      el('h5', null, '共通の星（全キャラ）'),
+      el('div', { class: 'dbg-grid' }, metaShared().map(k => lvRow(metaName(k), D.meta[k] | 0, G.data.meta[k].max, v => setM(k, v), '', k))),
+      el('h5', null, '専用の枝'), charSeg(metaChar, v => { metaChar = v; }),
+      el('div', { class: 'dbg-grid' }, mcKeys.map(k => lvRow(mcName + '・' + G.data.meta[k].name, D.meta[k] | 0, G.data.meta[k].max, v => setM(k, v), '', k))),
+      row(B(charName(metaChar) + 'の専用の星 MAX', () => allM(mcKeys, true), 'sm'), B(charName(metaChar) + 'の専用の星 0', () => allM(mcKeys, false), 'sm'))));
+    // constellations
+    const setC = (id, v) => { D.cons[id] = U.clamp(v | 0, 0, 6); render(); };
+    b.append(sec('命ノ星座（キャラごと）',
+      el('div', { class: 'dbg-grid' }, G.data.roster.map(id => lvRow(charName(id) + ' C', D.cons[id] | 0, 6, v => setC(id, v), 'cons'))),
+      row(B('全キャラ C0', () => { G.data.roster.forEach(id => { D.cons[id] = 0; }); render(); }, 'sm'), B('全キャラ C6', () => { G.data.roster.forEach(id => { D.cons[id] = 6; }); render(); }, 'sm gold'))));
+    // unlocks + stage clears
+    if (G.unlocks) {
+      b.append(sec('キャラ解放',
+        el('div', { class: 'dbg-grid' }, unlockable().map(id => {
+          const st = dState(id);
+          return el('div', { class: 'dbg-up' + (st === 'open' ? ' max' : st === 'buyable' ? ' has' : '') }, el('span', { class: 'dbg-un' }, charName(id)),
+            el('span', { class: 'dbg-tag' }, CH_STATE[st]),
+            B('解放', () => { D.chars[id] = true; render(); }, st === 'open' ? 'sm on' : 'sm'),
+            B('ロック', () => { D.chars[id] = false; render(); }, st !== 'open' ? 'sm on' : 'sm'));
+        })),
+        row(B('全キャラ解放', () => { unlockable().forEach(id => { D.chars[id] = true; }); render(); }, 'gold'),
+          B('全キャラロック', () => { unlockable().forEach(id => { D.chars[id] = false; }); render(); })),
+        el('p', { class: 'dbg-note' }, 'ロック＝購入前にもどす。ステージ1がクリア済みなら「購入待ち」、未クリアなら「ロック（シルエット）」。')));
+      b.append(sec('ステージクリア状態',
+        el('div', { class: 'dbg-grid' }, stages().map(d => {
+          const cl = !!D.cleared[d.id], req = d.requires, open = d.implemented !== false && (!req || D.cleared[req]);
+          return el('div', { class: 'dbg-up' + (cl ? ' max' : '') }, el('span', { class: 'dbg-un' }, d.order + '. ' + d.name),
+            el('span', { class: 'dbg-tag' }, cl ? 'クリア済' : open ? '挑戦可' : '未解放'),
+            B(cl ? 'クリアを消す' : 'クリア済にする', () => { D.cleared[d.id] = !cl; render(); }, 'sm'));
+        })),
+        row(B('全ステージクリア', () => { stages().forEach(d => { D.cleared[d.id] = true; }); render(); }, 'gold'),
+          B('クリア状態を全部消す', () => { stages().forEach(d => { D.cleared[d.id] = false; }); render(); }))));
+    }
     if (G.skillbook) {
       const SB = G.skillbook;
-      /* also patch the「記録しない」snapshot, so the choice survives the end of a debug run */
-      const bookAll = on => {
-        SB.setAll(on);
-        try { const raw = ls.get(K_RESTORE); if (raw) { const st = JSON.parse(raw); if (st.full) { st.full.book = JSON.parse(JSON.stringify(G.save.data.book || {})); st.full.bookNew = {}; st.full.codex = JSON.parse(JSON.stringify(G.save.data.codex || {})); ls.set(K_RESTORE, JSON.stringify(st)); } } } catch (e) { }
-        toast(on ? 'スキルブック 全登録' : 'スキルブック 全消去'); refresh();
-      };
-      b.append(sec('スキルブック（セーブに書きこむ）',
-        el('p', { class: 'dbg-note' }, '登録 ' + SB.count() + ' / ' + SB.total() + '（進化 ' + G.evolutions.filter(e => SB.has(e.key)).length + ' / ' + G.evolutions.length + ' 達成）'),
-        row(B('スキルブック全登録', () => bookAll(true), 'gold'), B('スキルブック全消去', () => bookAll(false))),
-        el('p', { class: 'dbg-note' }, '全登録＝すべてのスキルと進化の条件が見える。全消去＝黒いシルエット（？？？）にもどす（進化の条件も かくれる）。')));
+      b.append(sec('スキルブック',
+        el('p', { class: 'dbg-note' }, 'いま 登録 ' + SB.count() + ' / ' + SB.total() + '（進化 ' + G.evolutions.filter(e => SB.has(e.key)).length + ' / ' + G.evolutions.length + ' 達成）'),
+        seg([['keep', 'そのまま'], ['all', 'スキルブック全登録'], ['none', 'スキルブック全消去']], D.book, v => { D.book = v; }),
+        el('p', { class: 'dbg-note' }, '全登録＝すべてのスキルと進化の条件が見える。全消去＝黒いシルエット（？？？）にもどす。')));
     }
+    // relics
+    if (G.relics) {
+      const RL = G.relics, r = RL.data(), SL = RL.SLOTS, SE = RL.SETS;
+      const add = n => { const slots = RA.slot === 'all' ? SL.map(s => s.id) : [RA.slot]; for (let j = 0; j < n; j++) for (const s of slots) { const p = RL.roll(s, RA.rarity); p.set = RA.set; D.relAdd.push(p); } render(); };
+      const pend = {}; D.relAdd.forEach(p => { const k = SE[p.set].name + ' ★' + p.rarity; pend[k] = (pend[k] || 0) + 1; });
+      b.append(sec('聖遺物',
+        el('p', { class: 'dbg-note' }, 'いま 持っている ' + r.owned.length + '個（装備 ' + Object.keys(r.equipped).length + '）・未開封 ' + r.unopened),
+        row(lb('部位'), sel([['all', '5部位ぜんぶ']].concat(SL.map(s => [s.id, s.name])), RA.slot, v => { RA.slot = v; }),
+          lb('セット'), sel(Object.keys(SE).map(k => [k, SE[k].name]), RA.set, v => { RA.set = v; }),
+          seg([[5, '★5'], [4, '★4']], RA.rarity, v => { RA.rarity = v; })),
+        row(B('＋ 追加', () => add(1), 'gold'), B('＋ ×4 追加', () => add(4)),
+          D.relAdd.length ? el('span', { class: 'dbg-note' }, '追加予定 ' + D.relAdd.length + '個（' + Object.keys(pend).map(k => k + '×' + pend[k]).join('、') + '）') : null,
+          D.relAdd.length ? B('追加を取り消す', () => { D.relAdd = []; render(); }, 'sm') : null),
+        row(lb('未開封'), B('−', () => { D.unopened = Math.max(0, D.unopened - 1); render(); }, 'pm'), el('b', { class: 'dbg-lv' }, String(D.unopened)),
+          B('+', () => { D.unopened++; render(); }, 'pm'), B('+10', () => { D.unopened += 10; render(); }, 'sm')),
+        row(chk('追加した遺物を装備する（部位ごとに最後の1個）', D.relEquip, v => { D.relEquip = v; render(); }),
+          chk('持っている聖遺物を全部消す（装備もはずれる）', D.relClear, v => { D.relClear = v; render(); })),
+        el('p', { class: 'dbg-note' }, 'サブステータスはふつうに開けたときと同じ ランダム。セットは選んだもの。')));
+    }
+    // final stats (the current save — what a run would start with)
+    const P = G.progression, now = P.previewStats(statChar), bare = P.previewStats(statChar, { bare: true });
+    const rows = P.statRows(now, statChar), rb = P.statRows(bare, statChar);
+    const stBox = el('div', { class: 'dbg-stats wide' }, rows.map((x, i) => {
+      const d = rb[i] && rb[i].text !== x.text;
+      return el('div', { class: d ? 'chg' : '' }, el('span', null, x.name), el('b', null, x.text), d ? el('small', null, '基本 ' + rb[i].text) : null);
+    }));
+    b.append(sec('最終ステータス（いまのセーブ・出撃時 Lv1）', charSeg(statChar, v => { statChar = v; }), stBox,
+      el('p', { class: 'dbg-note' }, '星図・命ノ星座・聖遺物をふくめた 出撃直後の値（冒険中の強化は入らない）。緑＝基本値から変わったもの。未反映の変更は入りません。ホームの「ステータス」でも見られます。')));
+    const bkBtn = B('↩ 反映前のセーブに戻す', restoreBackup, 'warn', bk ? hm(bk.at) + ' のセーブ' : 'まだ反映していません');
+    if (!bk || run) bkBtn.disabled = true;
+    const goBtn = B(list.length ? '💾 この設定をセーブに反映（' + list.length + '件）' : '💾 この設定をセーブに反映', applySave, 'go save');
+    if (run) goBtn.disabled = true;
+    b.append(el('div', { class: 'dbg-go two' }, goBtn, bkBtn,
+      B('変更を捨てる', () => { D = snapDraft(); toast('未反映の変更を捨てました'); render(); }, 'sm')));
   }
+
+  /* confirm dialog inside the panel */
+  function ask(title, text, list, okLabel, onOk, danger) {
+    closeAsk();
+    const ok = B(okLabel, () => { closeAsk(); onOk(); }, danger ? 'warn' : 'gold');
+    const card = el('div', { class: 'dbg-ask-card' + (danger ? ' danger' : '') },
+      el('h4', null, (danger ? '⚠ ' : '') + title), text ? el('p', null, text) : null,
+      list && list.length ? el('ul', { class: 'dbg-dl' }, list.map(t => el('li', null, t))) : null,
+      el('div', { class: 'dbg-row end' }, B('やめる', closeAsk, 'close'), ok));
+    askNode = el('div', { class: 'dbg-ask', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, card);
+    askNode.addEventListener('pointerdown', e => { e.stopPropagation(); if (e.target === askNode) closeAsk(); });
+    wrap.append(askNode);
+    try { ok.focus({ preventScroll: true }); } catch (e) { }
+  }
+  function closeAsk() { if (askNode) { askNode.remove(); askNode = null; } }
   function upRow(k, lv, setLv) {
     const u = G.upgrades[k];
     return el('div', { class: 'dbg-up' + (lv >= u.max ? ' max' : lv > 0 ? ' has' : '') },

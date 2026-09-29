@@ -226,6 +226,40 @@ G.progression = (function () {
     return S;
   }
 
+  /** stats a character would start a run with (Lv1, no run upgrades) — computed from the save without starting a run.
+      o.bare: without 天賦の星図・命ノ星座・聖遺物 (the character's own base values). Used by the home ステータス view / debug panel. */
+  function previewStats(charId, o) {
+    const ch = G.data.characters[charId]; if (!ch) return null;
+    const R = { charId, char: ch, levels: {}, evolved: {}, buffs: {}, time: 0, player: {} };
+    if (!(o && o.bare)) return computeStats(R);
+    const S = G.save.data, keep = { meta: S.meta, constellation: S.constellation, relics: S.relics };
+    try { S.meta = {}; S.constellation = {}; S.relics = { unopened: 0, owned: [], equipped: {} }; return computeStats(R); }
+    finally { S.meta = keep.meta; S.constellation = keep.constellation; S.relics = keep.relics; }
+  }
+
+  /** display rows for a stats object: [{k, name, text, v}] (v = number used to compare two stat sets) */
+  function statRows(S, charId) {
+    if (!S) return [];
+    const ch = G.data.characters[charId] || {}, own = ch.element || 'pyro', eln = ((G.EL && G.EL[own]) || { name: '' }).name;
+    const pc = v => (Math.round((v || 0) * 1000) / 10) + '%', pp = v => '+' + pc(v), x = v => '×' + (Math.round((v || 0) * 100) / 100);
+    const sets = S.relicSets || {}, SETS = (G.relics && G.relics.SETS) || {};
+    const rows = [
+      ['atk', '攻撃力', S.atk, v => U.fmtNum(v)], ['maxHp', '最大HP', S.maxHp, v => U.fmtNum(v)], ['def', '防御力', S.def, v => U.fmtNum(v)],
+      ['speed', '移動速度', S.speed, v => (v || 0).toFixed(2)], ['critRate', '会心率', S.critRate, pc], ['critDmg', '会心ダメージ', S.critDmg, pc],
+      ['recharge', '元素チャージ効率', S.recharge, pc], ['haste', '攻撃速度', S.haste, pc], ['cdr', 'クールタイム短縮', S.cdr, pc],
+      ['dmgBonus', '与えるダメージ', S.dmgBonus, pp], ['elBonus', eln + '元素ダメージ', (S.elBonus || {})[own] || 0, pp], ['burstBonus', '元素爆発ダメージ', S.burstBonus || 0, pp],
+      ['reactionBonus', '元素反応ダメージ', S.reactionBonus, pp], ['dmgReduction', '受けるダメージ軽減', S.dmgReduction, pc],
+      ['areaMul', '攻撃範囲', S.areaMul, x], ['explosionMul', '爆発範囲', S.explosionMul, x], ['range', '射程', S.range, v => (v || 0).toFixed(1)],
+      ['pickup', '回収範囲', S.pickup, v => (v || 0).toFixed(2)], ['extraProjectiles', '同時に撃つ数', S.extraProjectiles, v => '+' + (v || 0)],
+      ['xpMul', '経験値', S.xpMul, pc], ['moraMul', 'モラ獲得量', S.moraMul, pc], ['chestMul', '宝箱発見率', S.chestMul, pc],
+      ['offerCount', 'レベルアップの選択肢', S.offerCount, v => v + '枚'], ['revival', '不屈の心（復活）', S.revival ? 1 : 0, v => v ? 'あり' : 'なし'],
+      ['constellation', '命ノ星座', S.constellation || 0, v => 'C' + v],
+    ].map(([k, name, v, f]) => ({ k, name, v: +v || 0, text: f(+v || 0) }));
+    const st = Object.keys(sets).filter(k => sets[k] > 0);
+    rows.push({ k: 'relicSets', name: '聖遺物セット', v: st.reduce((a, k) => a + sets[k], 0), text: st.length ? st.map(k => ((SETS[k] || {}).name || k) + ' ' + sets[k]).join('・') : 'なし' });
+    return rows;
+  }
+
   /* ---------------- run lifecycle ---------------- */
   function initRun(R) {
     R.pendingLevels = 0; R.lastOffer = []; R.offerN = 0; R.sinceLauncher = 0;
@@ -619,7 +653,7 @@ G.progression = (function () {
   });
 
   const api = {
-    computeStats, initRun, addXp, update, available, makeOffer, reroll, apply, openLevelUp, openChest, evoReady, rollChest, resolveChoice, newLaunchers,
+    computeStats, previewStats, statRows, initRun, addXp, update, available, makeOffer, reroll, apply, openLevelUp, openChest, evoReady, rollChest, resolveChoice, newLaunchers,
     def, resonance: RES, constellations: CONST, constellationsOf, constellationLevel, setConstellation, metaDef, metaTree, applyCharStars, applyConstellation, checkResonance, checkEvoReady, blessingPool, metaVal, shieldAuraByCombat: false,
   };
   return api;

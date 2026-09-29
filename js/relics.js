@@ -1,5 +1,7 @@
 /* relics.js — モンドの遺物 (artifacts) (owner: PROGRESSION).
-   Save: G.save.data.relics = { unopened:number, owned:[piece], equipped:{slot:id}, nextId }
+   Save: G.save.data.relics = { unopened:number, owned:[piece], equipped:{slot:id}, nextId, presets:{charId:[preset]} }
+   preset = { name, eq:{slot:id}, at }  — 装備プリセット (UI): saved per character, lives in the save (a data reset clears it).
+   Loading one equips the pieces that still exist; pieces that were salvaged are reported and that slot keeps what is on.
    piece = { id, slot:'flower'|'plume'|'sands'|'goblet'|'circlet', set, rarity:4|5, main:{k,v}, subs:[{k,v}], lock }
    API: G.relics.open() -> pieces, G.relics.applyMods(S,R), G.relics.renderPanel(container), G.relics.summary() */
 'use strict';
@@ -98,6 +100,57 @@ G.relics = (function () {
     return out;
   }
 
+  /* ---------------- 装備プリセット (per character) ---------------- */
+  const MAX_PRE = 8;
+  const SET_SHORT = { wind: '風跡', flame: '烈火', luck: 'モラ商人' };
+  function presetsOf(charId) {
+    const r = data();
+    if (!r.presets || typeof r.presets !== 'object' || Array.isArray(r.presets)) r.presets = {};
+    if (!Array.isArray(r.presets[charId])) r.presets[charId] = [];
+    const l = r.presets[charId];
+    for (let i = l.length - 1; i >= 0; i--) if (!l[i] || !l[i].eq || typeof l[i].eq !== 'object') l.splice(i, 1);   // in place: callers keep the array
+    return l;
+  }
+  /** per slot: { slot, id, piece, state: 'ok' | 'miss' (salvaged) | 'none' (the preset keeps that slot empty) } */
+  function presetSlots(p) {
+    return SLOTS.map(sl => {
+      const id = p.eq[sl.id]; if (id == null) return { slot: sl.id, state: 'none', piece: null };
+      const pc = byId(id); return { slot: sl.id, id, piece: pc || null, state: pc ? 'ok' : 'miss' };
+    });
+  }
+  const presetIsCurrent = p => { const e = data().equipped; return SLOTS.every(sl => (p.eq[sl.id] == null ? null : p.eq[sl.id]) === (e[sl.id] == null ? null : e[sl.id])); };
+  function autoPresetName(charId, eq) {
+    const n = {}; for (const s in eq) { const pc = byId(eq[s]); if (pc) n[pc.set] = (n[pc.set] || 0) + 1; }
+    const ks = Object.keys(n).sort((a, b) => n[b] - n[a]);
+    let base = ks.length ? ks.map(k => (SET_SHORT[k] || SETS[k].name) + n[k]).join('・') : 'プリセット';
+    const names = presetsOf(charId).map(p => p.name);
+    if (!names.includes(base)) return base;
+    for (let i = 2; ; i++) if (!names.includes(base + ' (' + i + ')')) return base + ' (' + i + ')';
+  }
+  function savePreset(charId, idx) {
+    const list = presetsOf(charId), eq = Object.assign({}, data().equipped);
+    if (idx != null && list[idx]) list[idx] = { name: list[idx].name, eq, at: Date.now() };
+    else { if (list.length >= MAX_PRE) return null; list.push({ name: autoPresetName(charId, eq), eq, at: Date.now() }); idx = list.length - 1; }
+    G.save.write(); return idx;
+  }
+  /** equips a preset: returns { equipped:[slot], missing:[slot], cleared:[slot] } */
+  function applyPreset(charId, idx) {
+    const p = presetsOf(charId)[idx]; if (!p) return null;
+    const r = data(), out = { equipped: [], missing: [], cleared: [] };
+    for (const sl of SLOTS) {
+      const id = p.eq[sl.id];
+      if (id == null) { if (r.equipped[sl.id] != null) out.cleared.push(sl.id); delete r.equipped[sl.id]; }
+      else if (byId(id)) { r.equipped[sl.id] = id; out.equipped.push(sl.id); }
+      else out.missing.push(sl.id);                  // salvaged: keep what is equipped there now
+    }
+    G.save.write(); return out;
+  }
+  function renamePreset(charId, idx, name) {
+    const p = presetsOf(charId)[idx]; name = String(name || '').trim().slice(0, 20);
+    if (!p || !name) return false; p.name = name; G.save.write(); return true;
+  }
+  function deletePreset(charId, idx) { const l = presetsOf(charId); if (!l[idx]) return false; l.splice(idx, 1); G.save.write(); return true; }
+
   /* ---------------- stats ---------------- */
   function totals() {
     const r = data(), t = {}, sets = {};
@@ -180,7 +233,7 @@ G.relics = (function () {
         <button class="pg-btn gold pg-open" ${r.unopened ? '' : 'disabled'} style="margin-top:4px">開く！</button></div></div>
         <div class="pg-rsum">${sm.stats.length ? sm.stats.map(s => `<span class="pg-chip">${s.text}</span>`).join('') : '<span class="pg-chip off">まだ装備なし</span>'}
         ${sm.sets.map(s => `<span class="pg-chip set${s.count >= 2 ? '' : ' off'}" style="border-color:${SETS[s.key].c}">${s.name} ${s.count}/4 ${s.count >= 2 ? '・' + s.b2 : ''}${s.count >= 4 ? '・' + s.b4 : ''}</span>`).join('')}</div></div>
-        <div class="pg-eq"></div><div class="pg-ph" style="margin-top:4px"><h3 style="font-size:15px">持っている遺物 (${r.owned.length})</h3>
+        <div class="pg-eq"></div><div class="pg-pre"></div><div class="pg-ph" style="margin-top:4px"><h3 style="font-size:15px">持っている遺物 (${r.owned.length})</h3>
         <button class="pg-btn pg-salv" style="font-size:13px;min-height:32px;padding:3px 12px">★4をまとめて分解</button></div><div class="pg-inv"></div>`;
       const eq = root.querySelector('.pg-eq');
       for (const sl of SLOTS) eq.append(pieceTile(byId(r.equipped[sl.id]), { slot: sl.id, eq: true, full: true }));
@@ -188,6 +241,7 @@ G.relics = (function () {
       const list = r.owned.slice().sort((a, b) => (eqIds.has(b.id) - eqIds.has(a.id)) || (b.rarity - a.rarity) || (score(b) - score(a)));
       if (!list.length) inv.innerHTML = '<div class="pg-empty">遺物はまだありません。遺跡守衛やウェンティをたおそう！</div>';
       for (const p of list) inv.append(pieceTile(p, { eq: eqIds.has(p.id) }));
+      drawPresets(root.querySelector('.pg-pre'));
       root.querySelector('.pg-open').addEventListener('click', openAnim);
       if (G.inspect) { const bi = root.querySelector('.pg-rbox img'); G.inspect.bindTap(bi, () => G.inspect.open({ from: bi, img: 'assets/icon_relic.webp', title: 'モンドの遺物', sub: '未開封 ×' + r.unopened, color: '#9fe8c8',
         body: G.inspect.sec('', 'ボスをたおすと 手に入る。「開く！」で 中身がわかるよ') + G.inspect.sec('部位', SLOTS.map(x => x.name).join('・')) }), '大きく見る'); }
@@ -196,6 +250,91 @@ G.relics = (function () {
         if (!n) { G.audio.sfx('denied'); return; }
         G.audio.sfx('mora'); draw(); G.bus.emit('moraChange', G.save.data.mora);
       });
+    }
+    /* ---- 装備プリセット: tap a card to pick it → 装備する / 上書き保存 / 名前を変える / 削除 ---- */
+    let selPre = -1, renPre = -1, pmsg = null;
+    const slotNames = ids => ids.map(s => SLOT[s].name).join('・');
+    function say(text, bad) { pmsg = { text, bad, t: Date.now() }; }
+    function drawPresets(host) {
+      if (!host) return;
+      const list = presetsOf(viewChar), r = data(), nEq = Object.keys(r.equipped).length;
+      if (selPre >= list.length) selPre = -1;
+      host.innerHTML = `<div class="pg-pre-h"><h4>装備プリセット<small>${ch.name}用 ${list.length}/${MAX_PRE}</small></h4><span class="sp"></span>
+        <button class="pg-btn gold pg-psave" ${list.length >= MAX_PRE || !nEq ? 'disabled' : ''}>＋ 今の装備を保存</button></div><div class="pg-plist"></div><div class="pg-pacts"></div>`;
+      const pl = host.querySelector('.pg-plist'), acts = host.querySelector('.pg-pacts');
+      if (!list.length) pl.innerHTML = `<div class="pg-pempty">${nEq ? 'いまの装備の組み合わせに 名前をつけて保存できます（' + ch.name + 'ごと）。' : '遺物を装備すると、その組み合わせを保存できます。'}</div>`;
+      list.forEach((p, i) => {
+        const st = presetSlots(p), miss = st.filter(x => x.state === 'miss').length, cur = presetIsCurrent(p);
+        const c = document.createElement('div');
+        c.className = 'pg-pc' + (i === selPre ? ' sel' : '') + (cur ? ' cur' : ''); c.dataset.i = i;
+        c.setAttribute('role', 'button'); c.tabIndex = 0; c.title = 'タップでえらぶ・長押し / 右クリックで中身を見る';
+        const glyphs = st.map(x => x.piece ? `<i class="r${x.piece.rarity}" style="--c:${SETS[x.piece.set].c}" title="${SLOT[x.slot].name}">${glyph(SLOT[x.slot].glyph)}</i>`
+          : `<i class="${x.state}" title="${SLOT[x.slot].name}${x.state === 'miss' ? '（見つからない）' : '（なし）'}">${glyph(SLOT[x.slot].glyph)}</i>`).join('');
+        c.innerHTML = (i === renPre ? '' : `<div class="pg-pn"></div>`) + `<div class="pg-pg">${glyphs}</div>`
+          + `<div class="pg-pm${miss ? ' bad' : ''}">${miss ? '✕ ' + miss + '個 見つからない' : st.filter(x => x.piece).length + '部位' + (cur ? '・いまの装備' : '')}</div>`;
+        if (i === renPre) {
+          const inp = document.createElement('input'); inp.className = 'pg-pin'; inp.type = 'text'; inp.value = p.name; inp.maxLength = 20;
+          inp.setAttribute('enterkeyhint', 'done'); inp.setAttribute('aria-label', 'プリセットの名前');
+          let done = false;
+          const commit = ok => { if (done) return; done = true; renPre = -1; if (ok && inp.value.trim() && inp.value.trim() !== p.name) { renamePreset(viewChar, i, inp.value); say('名前を「' + p.name + '」に変えた'); } G.audio.sfx('ui'); draw(); };
+          inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') { e.preventDefault(); commit(false); } });
+          inp.addEventListener('blur', () => setTimeout(() => commit(true), 0));
+          ['click', 'pointerdown'].forEach(ev => inp.addEventListener(ev, e => e.stopPropagation()));
+          c.prepend(inp);
+        } else c.querySelector('.pg-pn').textContent = p.name;
+        c.addEventListener('click', () => { if (i === renPre) return; G.audio.sfx('ui'); selPre = selPre === i ? -1 : i; pmsg = null; draw(); });
+        c.addEventListener('keydown', e => { if (e.target === c && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
+        if (G.inspect) G.inspect.bindHold(c, () => zoomPreset(i, c));
+        pl.append(c);
+      });
+      const btn = (label, cls, fn, dis) => { const b = document.createElement('button'); b.className = 'pg-btn ' + (cls || ''); b.innerHTML = label; if (dis) b.disabled = true; b.addEventListener('click', fn); acts.append(b); return b; };
+      const p = list[selPre];
+      if (p) {
+        btn('装備する', 'gold pa-eq', () => {
+          const res = applyPreset(viewChar, selPre); if (!res) return;
+          G.audio.sfx(res.equipped.length ? 'relic' : 'denied');
+          say(res.missing.length ? '「' + p.name + '」を装備（' + res.equipped.length + '部位）。✕ 見つからない: ' + slotNames(res.missing) + ' — 分解ずみ？ そこは いまの装備のまま'
+            : '「' + p.name + '」を装備した！', res.missing.length > 0);
+          draw();
+        }, presetIsCurrent(p));
+        btn('上書き保存', 'pa-over', () => ask('プリセットを上書き', '「' + p.name + '」を いまの装備で上書きします。', '上書きする', () => { savePreset(viewChar, selPre); G.audio.sfx('relic'); say('「' + p.name + '」を いまの装備で上書きした'); draw(); }), !nEq);
+        btn('名前変更', 'pa-ren', () => { renPre = selPre; draw(); const n = root.querySelector('.pg-pin'); if (n) { try { n.focus({ preventScroll: true }); n.select(); } catch (e) { } } });
+        btn('削除', 'danger pa-del', () => ask('プリセットを削除', '「' + p.name + '」を削除します。遺物そのものは なくなりません。', '削除する', () => { deletePreset(viewChar, selPre); selPre = -1; G.audio.sfx('ui'); say('「' + p.name + '」を削除した'); draw(); }, true));
+      } else if (list.length) acts.innerHTML = '<div class="pg-pempty">プリセットをタップして えらぶ（長押しで 中身を見る）</div>';
+      if (pmsg && Date.now() - pmsg.t < 6000) { const m = document.createElement('div'); m.className = 'pg-pmsg' + (pmsg.bad ? ' bad' : ''); m.textContent = pmsg.text; host.append(m); }
+      host.querySelector('.pg-psave').addEventListener('click', () => {
+        const i = savePreset(viewChar); if (i == null) { G.audio.sfx('denied'); return; }
+        G.audio.sfx('relic'); selPre = i; say('「' + presetsOf(viewChar)[i].name + '」として保存した（名前は「名前を変える」で変更）'); draw();
+      });
+    }
+    function ask(title, text, okLabel, onOk, danger) {
+      const ov = document.createElement('div'); ov.className = 'pg-rdet pg-ask';
+      ov.innerHTML = `<div class="pg-rcard${danger ? ' danger' : ''}" role="dialog" aria-modal="true"><h4></h4><p></p><div class="pg-racts"><button class="pg-btn a-no">やめる</button><button class="pg-btn ${danger ? 'danger' : 'gold'} a-ok"></button></div></div>`;
+      ov.querySelector('h4').textContent = (danger ? '⚠ ' : '') + title; ov.querySelector('p').textContent = text; ov.querySelector('.a-ok').textContent = okLabel;
+      const shut = () => { ov.remove(); removeEventListener('keydown', onKey, true); };
+      const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); shut(); } };
+      addEventListener('keydown', onKey, true);
+      ov.addEventListener('click', e => { if (e.target === ov) shut(); });
+      ov.querySelector('.a-no').addEventListener('click', () => { G.audio.sfx('ui'); shut(); });
+      ov.querySelector('.a-ok').addEventListener('click', () => { shut(); onOk(); });
+      document.body.append(ov);
+      try { ov.querySelector('.a-ok').focus({ preventScroll: true }); } catch (e) { }
+    }
+    function presetOpts(i) {
+      const I = G.inspect, p = presetsOf(viewChar)[i]; if (!p) return { title: '？' };
+      const st = presetSlots(p), n = {};
+      st.forEach(x => { if (x.piece) n[x.piece.set] = (n[x.piece.set] || 0) + 1; });
+      const lines = st.map(x => `<b>${SLOT[x.slot].name}</b>　` + (x.piece ? `<span style="color:${SETS[x.piece.set].c}">${SETS[x.piece.set].name}</span> ${'★'.repeat(x.piece.rarity)}　${label(x.piece.main.k, x.piece.main.v)}`
+        : x.state === 'miss' ? '<span style="color:#ff9a8a">✕ 見つからない（分解ずみ）</span>' : '<span style="opacity:.6">（なし）</span>')).join('<br>');
+      const sets = Object.keys(n).map(k => `${SETS[k].name} ${n[k]}/4` + (n[k] >= 2 ? '：' + setText(k, 'b2') : '') + (n[k] >= 4 ? '・' + setText(k, 'b4') : '')).join('<br>');
+      const first = st.find(x => x.piece);
+      return { html: `<div class="insp-rg" style="color:${first ? SETS[first.piece.set].c : '#9fe8c8'}">${glyph(first ? SLOT[first.slot].glyph : 'flower')}</div>`, color: first ? SETS[first.piece.set].c : '#9fe8c8',
+        title: p.name, sub: ch.name + 'の 装備プリセット', lv: presetIsCurrent(p) ? '✔ 装備中' : '',
+        body: I.sec('部位', lines) + (sets ? I.sec('セット効果（' + ch.name + '）', sets) : '') };
+    }
+    function zoomPreset(i, from) {
+      const l = presetsOf(viewChar), cards = [...root.querySelectorAll('.pg-pc')];
+      G.inspect.open({ index: i, from, list: l.map((_, j) => () => Object.assign(presetOpts(j), { from: cards[j] || null })) });
     }
     function salvageMany(f) {
       const r = data(); let got = 0, n = 0;
@@ -266,5 +405,6 @@ G.relics = (function () {
     return root;
   }
 
-  return { SLOTS, STATS: ST, SETS, data, open, roll, score, applyMods, totals, summary, renderPanel, label };
+  return { SLOTS, STATS: ST, SETS, data, open, roll, score, applyMods, totals, summary, renderPanel, label,
+    presetsOf, presetSlots, savePreset, applyPreset, renamePreset, deletePreset, MAX_PRESETS: MAX_PRE };
 })();

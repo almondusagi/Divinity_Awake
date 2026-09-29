@@ -974,6 +974,52 @@ body.reduced-fx .guide.can::after, body.reduced-fx .sb-card.got .sb-ic .pg-art, 
 .dbg-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; font-size: 12px; }
 .dbg-stats > div { display: flex; justify-content: space-between; gap: 6px; padding: 1px 4px; border-bottom: 1px solid #ffffff10; }
 .dbg-stats span { color: #9aa6bd; }
+.dbg-b:disabled { opacity: .4; cursor: default; transform: none; }
+/* 出撃タブ: ⚔ 出撃の設定 ／ 💾 セーブ編集 */
+.dbg-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 8px; }
+.dbg-mode .dbg-b { min-height: 44px; padding: 4px 10px; text-align: left; background: #1d2940; border-color: #ffffff22; }
+.dbg-mode .dbg-b span { display: flex; flex-direction: column; line-height: 1.25; }
+.dbg-mode .dbg-b b { font-size: 14px; }
+.dbg-mode .dbg-b small { font-size: 11px; font-weight: 700; color: #aab4c8; }
+.dbg-mode .dbg-b.on { background: #1f4a6a; border-color: #7ac8ff; box-shadow: inset 0 -3px 0 #7ac8ff; }
+.dbg-mode .dbg-b.save.on { background: #5a4012; border-color: #ffd24a; box-shadow: inset 0 -3px 0 #ffd24a; }
+.dbg-mode .dbg-b.on small { color: #fff; }
+.dbg-sum.save { background: #5a401233; border-color: #ffd24a88; }
+.dbg-sum .dbg-bk { color: #ffd98a; font-size: 11.5px; }
+.dbg-dl { margin: 4px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.45; color: #ffe7a8; }
+.dbg-go.two { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.dbg-go.two .dbg-b.go { flex: 1 1 260px; width: auto; }
+.dbg-go.two .dbg-b.warn { flex: 0 1 auto; }
+.dbg-b.go.save { background: linear-gradient(180deg, #c9a13a, #7a5510); border-color: #ffe7a8; }
+.dbg-row.end { justify-content: flex-end; margin-top: 10px; }
+.dbg-stats.wide { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); }
+.dbg-stats.wide span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dbg-stats.wide b { white-space: nowrap; }
+.dbg-stats > div.chg b { color: #7dffa8; }
+.dbg-stats small { flex: none; color: #7f8aa3; font-size: 10.5px; margin-left: auto; padding-left: 4px; }
+.dbg-stats > div { align-items: baseline; }
+.dbg-stats b { margin-left: auto; }
+.dbg-stats small + b, .dbg-stats b + small { margin-left: 4px; }
+/* presets */
+.dbg-pres { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 4px; }
+.dbg-pre { gap: 4px; }
+.dbg-pre.empty { opacity: .75; }
+.dbg-pno { flex: none; width: 20px; height: 20px; border-radius: 50%; background: #33415e; color: #ffd98a; font: 900 11px/20px ui-monospace, Menlo, Consolas, monospace; text-align: center; }
+.dbg-pnb { min-height: 28px; padding: 0 4px; border: 0; border-radius: 5px; background: none; color: #eef2fa; font: 700 12.5px var(--font); text-align: left; cursor: text;
+  text-decoration: underline dotted #ffffff55; text-underline-offset: 3px; }
+.dbg-pnb:hover { background: #ffffff10; }
+.dbg-pin { flex: 1; min-width: 0; width: 60px; border-color: #ffd24a; }
+/* confirm dialog */
+.dbg-ask { position: fixed; inset: 0; z-index: 96; display: flex; align-items: center; justify-content: center; background: #000a;
+  padding: calc(10px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l)); }
+.dbg-ask-card { width: min(480px, 100%); max-height: 100%; overflow-y: auto; padding: 12px 14px; border-radius: 10px; background: #15203a; border: 1.5px solid #ffd24a;
+  box-shadow: 0 10px 40px #000d; color: #e6e9f0; font: 600 13px/1.5 var(--font); }
+.dbg-ask-card.danger { border-color: #ff6a8a; }
+.dbg-ask-card h4 { margin: 0 0 6px; font-size: 15px; color: #ffd98a; }
+.dbg-ask-card.danger h4 { color: #ffb3c4; }
+.dbg-ask-card p { margin: 0; color: #cfd6e6; font-size: 12.5px; }
+.dbg-ask-card .dbg-b { min-height: 38px; padding: 4px 16px; }
+@media (max-width: 720px) { .dbg-pres { grid-template-columns: 1fr; } }
 @media (max-height: 520px) {
   .dbg-wrap { padding: calc(4px + var(--safe-t)) calc(4px + var(--safe-r)) calc(4px + var(--safe-b)) calc(4px + var(--safe-l)); }
   .dbg-panel { width: 100%; }
@@ -1385,3 +1431,60 @@ body.reduced-fx .insp-glow { animation-duration: 6s; opacity: .25; } body.reduce
 @keyframes pmbNew { to { box-shadow: 0 0 0 2px #fff3b0, 0 0 22px #ffd24a } }
 @media (max-height: 520px) { .pm-board { top: calc(84px + var(--safe-t)); width: min(170px, 22vw); padding: 6px 8px 5px; } .pm-board li { font-size: 12.5px; padding: 2px 6px; line-height: 1.3; } .pm-board li i { font-size: 12px; line-height: 1; } .pm-board .pmb-head b { font-size: 12px; } .pm-board .pmb-head span, .pm-board .pmb-note { font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .pm-board.drop, .pm-board li.new { animation: none; } }
+
+/* ================= ステータス（ホーム・拡大ビューア）/ 聖遺物プリセット (UI: presets) ================= */
+.st-btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; padding: 3px 12px 3px 8px; border: 0; border-radius: 999px; cursor: pointer;
+  font: 800 12px var(--font); color: var(--cream2, #fff3d6); letter-spacing: .06em; background: linear-gradient(180deg, #2a3656e6, #141c30e6);
+  box-shadow: inset 0 0 0 1px #d3bc8eaa, 0 2px 8px #0008; text-shadow: none; transition: transform .12s, box-shadow .12s; }
+.st-btn i { display: inline-flex; width: 15px; height: 15px; color: #ffd98a; }
+.st-btn i svg { width: 100%; height: 100%; }
+.st-btn:hover, .st-btn.kfocus, .st-btn:focus-visible { transform: translateY(-1px) scale(1.04); box-shadow: inset 0 0 0 1px #ffe7a8, 0 0 12px #ffcf6b66; }
+.st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 2px 12px; font-size: 13px; line-height: 1.35; }
+.st-row { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-radius: 6px; background: rgba(8, 14, 28, .55); min-width: 0; }
+.st-row span { flex: 1; min-width: 0; color: #d3bc8e; font-weight: 800; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-row b { color: #fff3d6; font-weight: 900; white-space: nowrap; }
+.st-row small { color: #ece5d877; font-size: 10.5px; white-space: nowrap; }
+.st-row.up b { color: #8ff7b0; }
+.st-row[data-k="relicSets"] { grid-column: 1 / -1; } .st-row[data-k="relicSets"] b { white-space: normal; }
+@media (max-height: 480px) { .st-btn { margin-top: 3px; padding: 2px 10px 2px 6px; font-size: 11px; } .st-grid { font-size: 12px; } .st-row { padding: 2px 5px; } }
+
+/* 聖遺物プリセット (js/relics.js renderPanel) */
+.pg-pre { margin: -2px 0 12px; padding: 8px 10px 10px; border-radius: 14px; background: linear-gradient(160deg, #1b2a3c, #101a26); border: 1.5px solid #9fe8c844; }
+.pg-pre-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+.pg-pre-h h4 { margin: 0; font-size: 15px; font-weight: 900; color: #fff4d6; }
+.pg-pre-h h4 small { font-size: 11px; color: #bfe; font-weight: 800; margin-left: 4px; }
+.pg-pre-h .sp { flex: 1; }
+.pg-pre-h .pg-btn { font-size: 13px; min-height: 34px; padding: 3px 12px; }
+.pg-plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.pg-pc { position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 6px 8px 7px; border-radius: 11px; cursor: pointer; text-align: left;
+  font-family: inherit; color: #fff4d6; background: #0008; border: 1.5px solid #ffffff22; transition: transform .1s, border-color .12s, box-shadow .12s; }
+.pg-pc:hover { transform: translateY(-2px); border-color: #9fe8c888; }
+.pg-pc.sel { border-color: #ffd24a; background: linear-gradient(170deg, #4a3a14cc, #1a1a14cc); box-shadow: 0 0 0 1px #ffd24a66, 0 0 14px #ffc34a55; }
+.pg-pc.cur::after { content: "装備中"; position: absolute; top: -7px; right: 6px; padding: 0 6px; border-radius: 5px; background: #9fe8c8; color: #0d2a22; font-size: 10px; font-weight: 900; }
+.pg-pc .pg-pn { font-size: 13px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-pc .pg-pin { width: 100%; min-width: 0; font: 900 13px var(--font, sans-serif); padding: 2px 6px; border-radius: 6px; border: 1.5px solid #ffd24a; background: #0b1220; color: #fff; }
+.pg-pg { display: flex; gap: 2px; }
+.pg-pg i { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; height: 24px; border-radius: 6px; background: #ffffff10; font-style: normal; font-size: 16px; color: var(--c, #fff); }
+.pg-pg i svg { width: 17px; height: 17px; }
+.pg-pg i.r5 { box-shadow: inset 0 -2px 0 #ffc34a; } .pg-pg i.r4 { box-shadow: inset 0 -2px 0 #c28bff; }
+.pg-pg i.none { color: #ffffff2a; }
+.pg-pg i.miss { color: #ff8a7a; background: #5a1a1a88; }
+.pg-pg i.miss::after { content: "✕"; position: absolute; right: 1px; bottom: -2px; font-size: 10px; font-weight: 900; color: #ff8a7a; }
+.pg-pc .pg-pm { font-size: 11px; font-weight: 800; color: #bfe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-pc .pg-pm.bad { color: #ff9a8a; }
+.pg-pacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pg-pacts .pg-btn { font-size: 13px; min-height: 36px; padding: 3px 12px; }
+.pg-pacts .pg-btn.danger, .pg-ask .pg-btn.danger { background: linear-gradient(180deg, #7a2a2a, #4a1414); border-color: #ff8a7a; color: #ffe0da; }
+.pg-pempty { grid-column: 1 / -1; padding: 6px 4px; font-size: 12px; font-weight: 700; color: #fff9; }
+.pg-pmsg { margin-top: 6px; padding: 5px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 800; background: #1f6a4a55; border: 1px solid #5dff9a88; color: #d8ffe6; animation: pgUp .2s both; }
+.pg-pmsg.bad { background: #6a1a2a55; border-color: #ff8a7a; color: #ffd6cf; }
+.pg-ask .pg-rcard { --rc: #ffd24a; padding-bottom: 2px; }
+.pg-ask .pg-rcard.danger { --rc: #ff8a7a; }
+.pg-ask h4 { padding: 14px 16px 4px; }
+.pg-ask p { margin: 0; padding: 0 16px 6px; font-size: 13px; font-weight: 700; line-height: 1.5; color: #e8f1ef; }
+@media (max-height: 480px) {
+  .pg-pre { padding: 6px 8px 8px; margin-bottom: 8px; }
+  .pg-plist { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 5px; }
+  .pg-pc { padding: 5px 6px 6px; }
+  .pg-pacts .pg-btn, .pg-pre-h .pg-btn { min-height: 34px; font-size: 12.5px; padding: 2px 10px; }
+}
