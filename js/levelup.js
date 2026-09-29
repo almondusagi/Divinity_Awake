@@ -97,7 +97,7 @@ G.progressionUI = (function () {
 @keyframes pgUp{0%{transform:translateY(12px);opacity:0}100%{transform:none;opacity:1}}
 /* ---- cards ---- */
 .pg-cards{position:relative;display:flex;gap:clamp(8px,1.6vw,20px);justify-content:center;align-items:stretch;perspective:900px;max-width:100%}
-.pg-card{--rc:#6fb7ff;--bg1:#27476f;--bg2:#4d7fb8;position:relative;width:clamp(150px,21vw,236px);min-height:clamp(250px,58vh,390px);padding:0;border:0;border-radius:14px;
+.pg-card{--rc:#6fb7ff;--bg1:#27476f;--bg2:#4d7fb8;position:relative;width:clamp(150px,21vw,236px);height:clamp(250px,58vh,390px);flex:none;padding:0;border:0;border-radius:14px;
   background:#101f2b;color:#fff4d6;text-align:center;cursor:pointer;display:flex;flex-direction:column;overflow:hidden;font-family:inherit;outline:none;
   box-shadow:0 0 0 2px var(--rc),0 10px 28px #000a;transform-origin:50% 80%;animation:pgCardIn .32s cubic-bezier(.2,1.25,.4,1) both;animation-delay:var(--d,0s);
   transition:transform .12s ease-out,box-shadow .12s ease-out,filter .12s;pointer-events:none}
@@ -126,9 +126,9 @@ G.progressionUI = (function () {
 @keyframes pgPulse{to{transform:scale(1.12)}}
 .pg-cat{position:absolute;left:8px;top:8px;z-index:2;font-size:clamp(10px,1.8vh,12px);font-weight:800;padding:1px 7px;border-radius:6px;background:#0007;color:#fff}
 .pg-key{position:absolute;left:8px;bottom:6px;z-index:2;width:22px;height:22px;border-radius:6px;background:#0008;border:1px solid #fff5;font-size:12px;font-weight:900;line-height:20px;color:#fff}
-.pg-body{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 10px 10px;background:linear-gradient(#0e1c27,#132634)}
+.pg-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 10px 10px;background:linear-gradient(#0e1c27,#132634)}
 .pg-body .pg-stars{font-size:clamp(11px,2.2vh,15px);margin-top:-2px}
-.pg-name{font-weight:900;font-size:clamp(15px,3.2vh,21px);line-height:1.15;text-shadow:0 2px 0 #0008}
+.pg-name{font-weight:900;font-size:clamp(15px,3.2vh,21px);line-height:1.15;text-shadow:0 2px 0 #0008;white-space:nowrap;max-width:100%;flex:none}
 .pg-pips{display:flex;gap:3px;margin:1px 0 2px}
 .pg-pips i{width:clamp(8px,1.6vh,11px);height:clamp(8px,1.6vh,11px);transform:rotate(45deg);border:1.5px solid var(--rc);border-radius:2px;background:#0005}
 .pg-pips i.on{background:var(--rc);box-shadow:0 0 6px var(--rc)}
@@ -174,12 +174,12 @@ G.progressionUI = (function () {
 .pg-bloom{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 55%,#fff 0,var(--mc) 30%,transparent 75%);animation:pgBloom .7s ease-out forwards}
 @keyframes pgBloom{0%{opacity:0}15%{opacity:1}100%{opacity:0}}
 .pg-reveal{position:relative;display:flex;gap:clamp(8px,1.8vw,22px);justify-content:center;align-items:flex-end;margin-top:clamp(20px,5vh,40px)}
-.pg-slot{position:relative;width:clamp(140px,20vw,210px);display:flex;flex-direction:column;align-items:center}
+.pg-slot{position:relative;width:clamp(140px,20vw,210px);flex:none;display:flex;flex-direction:column;align-items:center;align-self:flex-start}
 .pg-pillar{position:absolute;left:50%;bottom:30%;width:70%;height:120vh;transform:translateX(-50%);pointer-events:none;
   background:linear-gradient(0deg,var(--rc) 0,transparent 80%);opacity:0;filter:blur(4px);-webkit-mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent);mask:linear-gradient(90deg,transparent,#000 30%,#000 70%,transparent)}
 .pg-slot.show .pg-pillar{animation:pgPillar 1.1s ease-out forwards}
 @keyframes pgPillar{0%{opacity:0;transform:translateX(-50%) scaleX(.2)}25%{opacity:.95;transform:translateX(-50%) scaleX(1.1)}100%{opacity:.35;transform:translateX(-50%) scaleX(.8)}}
-.pg-slot .pg-card{width:100%;min-height:clamp(210px,50vh,330px);opacity:0;animation:none;pointer-events:none;cursor:default}
+.pg-slot .pg-card{width:100%;height:clamp(250px,52vh,340px);opacity:0;animation:none;pointer-events:none;cursor:default}
 .pg-slot.show .pg-card{animation:pgRise .45s cubic-bezier(.2,1.3,.4,1) forwards}
 .pg-slot.instant .pg-card{animation:none;opacity:1}
 .pg-slot.show .pg-card .insp-lens,.pg-slot.instant .pg-card .insp-lens{pointer-events:auto}
@@ -579,6 +579,37 @@ G.progressionUI = (function () {
     return `<div class="pg-top"><span class="pg-cat">${catTxt}</span>${flag}${art(key)}${o.num ? `<span class="pg-key${evb ? ' up' : ''}">${o.num}</span>` : ''}${evb}</div>
       <div class="pg-body">${stars(r)}<div class="pg-name">${up.name}</div>${pips}<div class="pg-desc">${nl(up.desc ? up.desc(Math.max(1, lv)) : '')}</div>${hintHtml}</div>`;
   }
+  /** owner 2026-09-29: every card has the same size — shrink the text (not the card) when it doesn't fit */
+  function fitCard(card) {
+    if (!card || !card.isConnected) return;
+    const body = card.querySelector('.pg-body'); if (!body || !body.clientHeight) return;
+    const name = body.querySelector('.pg-name'), desc = body.querySelector('.pg-desc'), hint = body.querySelector('.pg-hint');
+    [name, desc, hint].forEach(n => { if (n) n.style.fontSize = ''; });
+    if (name) { let f = parseFloat(getComputedStyle(name).fontSize), g = 0; while (name.scrollWidth > body.clientWidth - 12 && f > 10 && g++ < 30) { f -= 0.5; name.style.fontSize = f + 'px'; } }
+    let fd = desc ? parseFloat(getComputedStyle(desc).fontSize) : 0, fh = hint ? parseFloat(getComputedStyle(hint).fontSize) : 0, g = 0;
+    while (body.scrollHeight > body.clientHeight + 1 && g++ < 40 && (fd > 8 || fh > 7.5)) {
+      if (fd > 8) { fd -= 0.5; desc.style.fontSize = fd + 'px'; }
+      if (hint && fh > 7.5 && (fd <= 10 || g % 2)) { fh -= 0.5; hint.style.fontSize = fh + 'px'; }
+    }
+    // long level-pip rows (e.g. 雷鳥の羽 = 10 levels) shrink to the card width
+    const pips = body.querySelector('.pg-pips');
+    if (pips) { pips.style.transform = ''; const avail = body.clientWidth - 14, w = pips.scrollWidth; if (w > avail) { pips.style.transform = `scale(${(avail / w).toFixed(3)})`; pips.style.transformOrigin = '50% 50%'; } }
+    // the evolution hint's two phrases must each stay on one line (no orphan 「能」)
+    if (hint) { const parts = hint.querySelectorAll('.pg-hw'); let g2 = 0; const lh = () => parseFloat(getComputedStyle(hint).fontSize) * 1.6;
+      while (g2++ < 20 && fh > 7 && [...parts].some(x => x.getBoundingClientRect().height > lh())) { fh -= 0.5; hint.style.fontSize = fh + 'px'; } }
+    // category label vs. NEW!/Lv badge on narrow cards: shrink, then shorten 「〇〇専用」→「〇〇」
+    const cat = card.querySelector('.pg-cat'), flag = card.querySelector('.pg-top .pg-new, .pg-top .pg-lvl');
+    if (cat && flag) {
+      cat.style.fontSize = ''; if (cat.dataset.full) cat.textContent = cat.dataset.full;
+      const hit = () => cat.getBoundingClientRect().right > flag.getBoundingClientRect().left - 2;
+      let fc = parseFloat(getComputedStyle(cat).fontSize), g3 = 0;
+      while (hit() && fc > 8 && g3++ < 10) { fc -= 0.5; cat.style.fontSize = fc + 'px'; }
+      if (hit() && /専用$/.test(cat.textContent)) { cat.dataset.full = cat.textContent; cat.textContent = cat.textContent.replace(/専用$/, ''); }
+    }
+  }
+  function fitCards(root) { (root || document).querySelectorAll('.pg-card').forEach(fitCard); }
+  addEventListener('resize', () => requestAnimationFrame(() => fitCards()));
+  try { document.fonts && document.fonts.ready.then(() => fitCards()); } catch (e) { }
   function makeCard(R, key, o) {
     const up = G.progression.def(key) || {};
     o = o || {};
@@ -588,6 +619,9 @@ G.progressionUI = (function () {
     b.className = 'pg-card r' + (up.rarity || 3) + (up.cat === 'evo' ? ' evo' : '') + (up.cat === 'bless' ? ' bless' : '') + (unlock ? ' unlock' : '');
     b.dataset.fx = up.rarity >= 5 || unlock ? 5 : (up.rarity || 3);
     b.innerHTML = html;
+    requestAnimationFrame(() => { fitCard(b); setTimeout(() => fitCard(b), 120); });
+    // re-fit whenever the card is (re)laid out — e.g. chest cards attached/revealed after the slot spin
+    if (window.ResizeObserver) { let last = ''; const ro = new ResizeObserver(() => { const k = b.clientWidth + 'x' + b.clientHeight; if (k !== last && b.clientHeight) { last = k; fitCard(b); } if (!b.isConnected && last) ro.disconnect(); }); ro.observe(b); }
     return b;
   }
 
