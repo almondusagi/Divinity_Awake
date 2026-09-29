@@ -354,6 +354,41 @@ G.screens = (function () {
     scr.append(chip);
     const S = () => G.save.data;
     const total = () => +S().pmFinds || 0;
+    /* owner 2026-09-29 (完全にネタ要素): time from the 1st tap to the 4th find, best 3 on the right.
+       The board does not exist until the first full round — then it drops in out of nowhere with the time. */
+    const times = () => (Array.isArray(S().pmTimes) ? S().pmTimes : []);
+    const fmtT = ms => (ms / 1000).toFixed(2) + '秒';
+    let board = null;
+    function renderBoard(newIdx, reveal) {
+      const T = times(); if (!T.length) return;
+      if (!board) { board = el('div', { class: 'pm-board', 'aria-label': 'パイモンかくれんぼ 最速記録' }); scr.append(board); }
+      const medal = ['🥇', '🥈', '🥉'];
+      board.innerHTML = '';
+      board.append(el('div', { class: 'pmb-head' }, el('b', null, '🏆 パイモン探し'), el('span', null, '最速タイム TOP3')));
+      const ol = el('ol', { class: 'pmb-list' });
+      for (let i = 0; i < 3; i++) {
+        const t = T[i];
+        ol.append(el('li', { class: (t == null ? 'empty' : '') + (i === newIdx ? ' new' : '') },
+          el('i', null, medal[i]), el('span', null, t == null ? '---' : fmtT(t.ms)), i === newIdx ? el('em', null, 'NEW!') : null));
+      }
+      board.append(ol, el('small', { class: 'pmb-note' }, '※ なぜか計測しています'));
+      if (reveal) { board.classList.remove('drop'); void board.offsetWidth; board.classList.add('drop'); }
+    }
+    function record(ms) {
+      const first = !times().length;
+      const T = times().slice(); const entry = { ms: Math.round(ms), at: Date.now() };
+      T.push(entry); T.sort((a, b) => a.ms - b.ms); S().pmTimes = T.slice(0, 3);
+      try { G.save.write(); } catch (e) { }
+      const idx = S().pmTimes.indexOf(entry);
+      setTimeout(() => {
+        if (!scr.isConnected) return;
+        renderBoard(idx, true);
+        sfx(first ? 'bossWarning' : idx >= 0 ? 'star' : 'ui', { rarity: idx === 0 ? 5 : 4 });
+        if (first) G.bus.emit('notice', { text: 'タイム ' + fmtT(ms) + '（…測ってました）', color: '#ffe07a' });
+        else if (idx === 0) G.bus.emit('notice', { text: '最速記録更新！ ' + fmtT(ms), color: '#ffe07a' });
+      }, 700);
+    }
+    if (times().length) renderBoard(-1, false);
     function showChip(n, big, line) {
       chip.querySelector('span').textContent = big ? 'かくれんぼ クリア！ これまで ' + U.fmtNum(total()) + '回 見つけた' : 'みつけた ×' + n + (line ? '　' + line : '');
       chip.classList.remove('on', 'big'); void chip.offsetWidth; chip.classList.add('on'); if (big) chip.classList.add('big');
@@ -369,7 +404,7 @@ G.screens = (function () {
     /** a random spot on the background: not on the logo / menu / tools / footer, not at the edges, not where she just was */
     function spot(size, from) {
       const W = innerWidth, H = innerHeight, mx = Math.max(24, W * 0.06), my = Math.max(20, H * 0.08), pad = Math.max(24, Math.min(W, H) * 0.06);
-      const avoid = [...scr.querySelectorAll('.title-main .logo, .title-main .logo-tag, .title-main .subtitle, .title-menu, .title-tr, .title-foot, .title-reset, .pm-chip')]
+      const avoid = [...scr.querySelectorAll('.title-main .logo, .title-main .logo-tag, .title-main .subtitle, .title-menu, .title-tr, .title-foot, .title-reset, .pm-chip, .pm-board')]
         .map(rect).filter(r => r.width > 0).map(r => ({ l: r.left - pad, t: r.top - pad, r: r.right + pad, b: r.bottom + pad }));
       let best = null, bs = -1e9;
       for (let i = 0; i < 80; i++) {
@@ -391,6 +426,8 @@ G.screens = (function () {
       if (st.busy || !m.isConnected) return;
       st.busy = true;
       const r = rect(m), cx = r.left + r.width / 2, cy = r.top + r.height / 2, last = st.step >= PM_STEPS - 1;
+      if (st.step === 0) st.t0 = performance.now();
+      if (last && st.t0) { record(performance.now() - st.t0); st.t0 = 0; }
       const n = ++st.round;
       S().pmFinds = total() + 1; try { G.save.write(); } catch (e) { }
       sfx('magnet'); try { G.input.haptic && G.input.haptic(12); } catch (e) { }
