@@ -1,8 +1,8 @@
-/* launchers.js — the six Timaeus launchers (owner: COMBAT). Spec §13–19.
+/* launchers.js — the seven Timaeus launchers (owner: COMBAT; dendro: DENDRO v6). Spec §13–19.
    G.weapons.launchers[key] = { update(R, dt, lv) }  (lv 1..5; called only while owned)
-   pyro 人形爆弾 · hydro 水入り瓶 · cryo 雪降らし · electro 連鎖雷 · anemo かぜおこし · geo 創造力
+   pyro 人形爆弾 · hydro 水入り瓶 · cryo 雪降らし · electro 連鎖雷 · anemo かぜおこし · geo 創造力 · dendro 種まきポット
    Evolutions (R.evolved): evo_launcher_pyro ボンボン大爆撃, _hydro 大渦潮, _cryo 永久凍土の吹雪,
-   _electro 雷雲の審判, _anemo 風神の大竜巻, _geo 岩王の城壁.
+   _electro 雷雲の審判, _anemo 風神の大竜巻, _geo 岩王の城壁, _dendro 千樹の森.
    Stats read: haste, cdr (cooldown), explosionMul (pyro bomb), areaMul, durationMul, shieldMul, maxHp. */
 'use strict';
 (function () {
@@ -524,6 +524,117 @@
       picks.forEach((e, i) => later(R, i * 0.08, () => construct(R, e.x, e.y, lv, evo)));
       if (evo && W.evoFirst(R, 'evo_launcher_geo')) W.evoFanfare(R, p.x, p.y, '#ffd24a', 6, 'evo_launcher_geo');
       setCd(R, 'geo', W.launcherCd(R, 13));
+    },
+  };
+
+  /* ============================ DENDRO 種まきポット (owner: DENDRO, v6) ============================
+     Throws a seed pot at an enemy cluster; it sprouts a bramble patch (radius 3) for 5 s that hits everything
+     inside every 0.6 s for dendroMul(lv) ×ATK and applies dendro (→ 燃焼 with pyro, 激化 with electro, 開花 with hydro).
+     CT 11 s, Lv4+ throws 2 pots. Evolution 千樹の森 (evo_launcher_dendro): patches ×1.35 radius, +3 s, and every 2 s
+     the forest pulses a bloom burst (radius = patch, 2.5 × the tick damage). Numbers are mirrored on the cards (upgrades.js). */
+  const DENDRO = { R: 3, LIFE: 5, TICK: 0.6, CD: 11, EVO_R: 1.35, EVO_LIFE: 3, PULSE: 2, PULSE_MUL: 2.5 };
+  function dendroMul(lv) { return 0.4 + 0.4 * (lv - 1); }   // Lv1 40% … Lv5 200% per tick
+  G.launcherDendro = { DENDRO, dendroMul };
+  let brambleImg = null, vineImg = null;
+  function brambleCanvas() { // ground decal: mossy disc with a bright rim
+    if (brambleImg) return brambleImg;
+    const c = G.assets.makeCanvas(256, 256), x = c.getContext('2d');
+    const g = x.createRadialGradient(128, 128, 8, 128, 128, 128);
+    g.addColorStop(0, 'rgba(70,140,40,0.42)'); g.addColorStop(0.72, 'rgba(46,104,28,0.5)'); g.addColorStop(0.9, 'rgba(150,220,80,0.55)');
+    g.addColorStop(0.96, 'rgba(214,245,160,0.45)'); g.addColorStop(1, 'rgba(214,245,160,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    brambleImg = c; return c;
+  }
+  function vineCanvas() { // thorny vines curling out from the centre + leaves (drawn once, rotated/scaled per patch)
+    if (vineImg) return vineImg;
+    const S = 256, c = G.assets.makeCanvas(S, S), x = c.getContext('2d');
+    let seed = 11; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    x.lineCap = 'round'; x.lineJoin = 'round';
+    const N = 9;
+    for (let i = 0; i < N; i++) {
+      const a0 = i / N * Math.PI * 2 + rnd() * 0.3, curl = (i % 2 ? 1 : -1) * (0.9 + rnd() * 0.5), len = 0.7 + rnd() * 0.25;
+      const pts = [];
+      for (let k = 0; k <= 14; k++) { const u = k / 14, a = a0 + curl * u * u, d = (0.08 + u * len) * S * 0.5; pts.push([S / 2 + Math.cos(a) * d, S / 2 + Math.sin(a) * d * 0.92]); }
+      const stroke = (w, col) => { x.beginPath(); pts.forEach((p, k) => k ? x.lineTo(p[0], p[1]) : x.moveTo(p[0], p[1])); x.lineWidth = w; x.strokeStyle = col; x.stroke(); };
+      stroke(9, 'rgba(22,58,14,0.9)'); stroke(5, '#3f8a24'); stroke(1.8, '#9fdc5a');
+      // thorns
+      for (let k = 3; k < 14; k += 2) {
+        const [px, py] = pts[k], [qx, qy] = pts[k + 1], dx = qx - px, dy = qy - py, l = Math.hypot(dx, dy) || 1, sd = k % 4 === 1 ? 1 : -1;
+        const nx = -dy / l * sd, ny = dx / l * sd;
+        x.beginPath(); x.moveTo(px + nx * 2, py + ny * 2); x.lineTo(px + nx * 9 + dx / l * 3, py + ny * 9 + dy / l * 3); x.lineTo(px + dx / l * 5 + nx * 2, py + dy / l * 5 + ny * 2); x.closePath();
+        x.fillStyle = '#e8f7c0'; x.fill(); x.lineWidth = 1.2; x.strokeStyle = 'rgba(22,58,14,0.9)'; x.stroke();
+      }
+      // leaves
+      for (const k of [5, 10]) {
+        const [px, py] = pts[k], a = Math.atan2(pts[k + 1][1] - py, pts[k + 1][0] - px) + (k === 5 ? 1.1 : -1.1);
+        x.save(); x.translate(px, py); x.rotate(a);
+        x.beginPath(); x.moveTo(0, 0); x.quadraticCurveTo(7, -7, 17, 0); x.quadraticCurveTo(7, 7, 0, 0);
+        x.fillStyle = '#7fd13a'; x.fill(); x.lineWidth = 1.5; x.strokeStyle = 'rgba(22,58,14,0.9)'; x.stroke();
+        x.beginPath(); x.moveTo(2, 0); x.lineTo(14, 0); x.lineWidth = 1; x.strokeStyle = '#d6f5a0'; x.stroke();
+        x.restore();
+      }
+    }
+    // centre sprout bulb
+    x.beginPath(); x.arc(S / 2, S / 2, 13, 0, Math.PI * 2); x.fillStyle = '#4f9a2a'; x.fill(); x.lineWidth = 3; x.strokeStyle = 'rgba(22,58,14,0.9)'; x.stroke();
+    x.beginPath(); x.arc(S / 2 - 4, S / 2 - 4, 4, 0, Math.PI * 2); x.fillStyle = '#d6f5a0'; x.fill();
+    vineImg = c; return c;
+  }
+  function bramble(R, x, y, lv, o) {
+    const S = R.stats, evo = !!o.evo;
+    const r = DENDRO.R * (S.areaMul || 1) * (evo ? DENDRO.EVO_R : 1);
+    const life = DENDRO.LIFE * (S.durationMul || 1) + (evo ? DENDRO.EVO_LIFE : 0);
+    const mul = dendroMul(lv), src = evo ? 'evo_launcher_dendro' : 'launcher_dendro';
+    G.audio.sfx('rockImpact', { x, y, vol: 0.45 }); elSfx(R, 'anemo', x, y, 0.4); // no dendro sfx in AUDIO yet: thud + leafy rustle
+    wave(R, x, y, r, '#8fd13a', 0.45, 0.28);
+    if (!reduced()) for (let i = 0; i < 16; i++) { const a = U.rand(0, U.TAU), s = U.rand(2, 6); G.fx.particle({ x, y: y - 0.3, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6 - U.rand(2, 4), life: U.rand(0.4, 0.7), size: U.rand(0.07, 0.15), color: i % 3 ? '#8fd13a' : '#e6ffb0', glow: i % 3 === 0, grav: 10, drag: 1.2 }); }
+    W.field(R, { x, y, r, life, tick: DENDRO.TICK, next: 0.15, evo, rot: U.rand(0, U.TAU), pulseT: DENDRO.PULSE, pulse: 0,
+      update(R2, dt, f) {
+        if (!f.evo) return;
+        f.pulseT -= dt; f.pulse = Math.max(0, f.pulse - dt * 2.5);
+        if (f.pulseT <= 0 && f.t < f.life - 0.3) { // 千樹の森: bloom-like burst from the whole forest
+          f.pulseT = DENDRO.PULSE; f.pulse = 1;
+          G.combat.aoe(R2, f.x, f.y, f.r, { mul: mul * DENDRO.PULSE_MUL, element: 'dendro', gauge: 1, src: 'evo_launcher_dendro', knock: 1.0 });
+          G.fx.explosion && G.fx.explosion(f.x, f.y, f.r * 0.7, { color: '#8fd13a', kind: 'bloom' });
+          wave(R2, f.x, f.y, f.r * 1.1, '#b6ff6a', 0.5, 0.35);
+          G.audio.sfx('explosion', { x: f.x, y: f.y, vol: 0.5 });
+        }
+      },
+      onTick(R2, f) {
+        elSfx(R2, 'anemo', f.x, f.y, 0.18);
+        G.combat.aoe(R2, f.x, f.y, f.r, { mul, element: 'dendro', gauge: 1, src, knock: 0 });
+        if (!reduced()) for (let i = 0; i < 3; i++) { const a = U.rand(0, U.TAU), d = U.rand(0, f.r); G.fx.particle({ x: f.x + Math.cos(a) * d, y: f.y + Math.sin(a) * d, vx: U.rand(-0.3, 0.3), vy: -U.rand(0.8, 1.8), life: 0.5, size: 0.09, color: '#c9ff7a', glow: true, grav: 1 }); }
+      },
+      draw(ctx, f) {
+        const grow = U.ease.outBack(Math.min(1, f.t / 0.35)), a = Math.min(1, f.t / 0.2, (f.life - f.t) / 0.8), t = f.t, r = f.r * grow;
+        ctx.globalAlpha = a; ctx.drawImage(brambleCanvas(), f.x - r, f.y - r * 0.92, r * 2, r * 1.84);
+        // vines: two layers turning slowly in opposite directions (squashed for the top-down perspective)
+        const vi = vineCanvas();
+        for (let k = 0; k < 2; k++) {
+          const rr = r * (k ? 0.72 : 1.02), rot = f.rot + (k ? -1 : 1) * t * 0.12 + k * 1.3;
+          ctx.save(); ctx.translate(f.x, f.y); ctx.scale(1, 0.62); ctx.rotate(rot);
+          ctx.globalAlpha = a * (k ? 0.8 : 1); ctx.drawImage(vi, -rr, -rr, rr * 2, rr * 2); ctx.restore();
+        }
+        ctx.globalCompositeOperation = 'lighter';
+        const tickK = f.tick ? 1 - Math.min(1, (f.next - f.t) / f.tick) : 0; // brightens toward each damage tick
+        ctx.globalAlpha = a * (0.18 + 0.22 * tickK * tickK + 0.6 * f.pulse);
+        ctx.drawImage(glow('#8fd13a', 64), f.x - r, f.y - r * 0.6, r * 2, r * 1.2);
+        if (f.evo) { ctx.globalAlpha = a * (0.5 + 0.5 * f.pulse); ctx.strokeStyle = '#d6f5a0'; ctx.lineWidth = 0.08 + 0.1 * f.pulse; ctx.beginPath(); ctx.ellipse(f.x, f.y, r * (0.96 + 0.08 * f.pulse), r * 0.6, 0, 0, U.TAU); ctx.stroke(); }
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+      } });
+  }
+  L.launcher_dendro = {
+    update(R, dt, lv) {
+      if (!ready(R, 'dendro', dt)) return;
+      const p = R.player, evo = !!R.evolved.evo_launcher_dendro, used = [], count = lv >= 4 ? 2 : 1;
+      let fan = evo && W.evoFirst(R, 'evo_launcher_dendro');
+      for (let i = 0; i < count; i++) {
+        const t = W.cluster(R, p.x, p.y, 11, 3, used); if (!t) break; used.push(t);
+        const tx = t.x + U.rand(-0.3, 0.3), ty = t.y + U.rand(-0.3, 0.3), fanNow = fan; fan = false;
+        W.lob(R, { x: p.x, y: p.y - 0.2, tx, ty, time: 0.5 + i * 0.08, height: 3, sprite: 'seedpod', size: 1.0, spin: 7, glow: '#8fd13a', smoke: '#c9ff7a',
+          onLand(R2) { bramble(R2, tx, ty, lv, { evo }); if (fanNow) W.evoFanfare(R2, tx, ty, '#8fd13a', 6, 'evo_launcher_dendro'); } });
+      }
+      setCd(R, 'dendro', used.length ? W.launcherCd(R, DENDRO.CD) : 0.3);
+      if (used.length) G.audio.sfx('anemo', { x: p.x, y: p.y, vol: 0.3 });
     },
   };
 })();

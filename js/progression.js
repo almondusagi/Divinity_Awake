@@ -18,7 +18,7 @@
      burstBuff      true with C6: while R.buffs.burstBuffUntil > R.time, ATK/speed +15% (handled here)
      shieldRange    shield aura radius in units (3 base; shield_range)
      shieldDmg      shield aura damage ×ATK per second (0.6 base; shield_damage) — ticked HERE (see shieldAura)
-     resonance      {pyro,hydro,cryo,electro,anemo,geo,all} booleans (already applied to the stats)
+     resonance      {pyro,hydro,cryo,electro,anemo,geo,dendro,all} booleans (already applied to the stats)
      offerCount     level-up card count (3, or 4 with the 2nd relic set)                                  */
 'use strict';
 G.upgrades = G.upgrades || {};
@@ -78,21 +78,43 @@ G.progression = (function () {
     S.constellation[charId] = U.clamp(n | 0, 0, 6);
   }
 
-  /* ---------------- star map helpers (shared stars + the selected character's own branch) ---------------- */
-  /** meta definition with the character's names/texts applied (矢の本数 → 剣の本数 …) */
-  function metaDef(key, charId) {
-    const d = G.data.meta[key]; if (!d) return d;
-    const t = G.data.metaText && G.data.metaText[charId] && G.data.metaText[charId][key];
-    return t ? Object.assign({}, d, t) : d;
+  /* ---------------- 天賦の星図 helpers (owner: TALENT) — one independent map per character (v6) ----------------
+     levels: G.save.data.metaC[charId][key]. The old shared G.save.data.meta is refunded once (migrateMeta). */
+  /** node definition with the character's kit texts applied (n_sp → 狙い撃ち / 剣の本数 …) */
+  function metaDef(key, charId) { return G.data.metaDefFor(key, charId || metaChar()); }
+  /** {root, nodes, branches} — the SAME layout for every character */
+  function metaTree() { return G.data.metaTree; }
+  /** the character whose map applies: the running character, else the home selection */
+  function metaChar() {
+    const R = G.run, u = G.save && G.save.data && G.save.data.uiSel;
+    return (R && R.charId) || (u && u.char) || 'amber';
   }
-  /** {nodes, branches} for charId: shared nodes + that character's branch (br:'char') */
-  function metaTree(charId) {
-    const TR = G.data.metaTree, mc = G.data.metaChar && G.data.metaChar[charId];
-    const nodes = Object.assign({}, TR.nodes, mc ? mc.nodes : null);
-    const branches = Object.assign({}, TR.branches, mc ? { char: { name: mc.name, c: mc.c } } : null);
-    return { root: TR.root, nodes, branches };
+  const NO_META = Object.freeze({});
+  /** charId's star levels {key: lv}. create=true makes the object in the save (for writes). */
+  function metaLevels(charId, create) {
+    const S = G.save.data; if (!S.metaV6) migrateMeta();
+    const id = charId || metaChar();
+    if (!S.metaC || typeof S.metaC !== 'object') { if (!create) return NO_META; S.metaC = {}; }
+    let L = S.metaC[id];
+    if (!L || typeof L !== 'object') { if (!create) return NO_META; L = S.metaC[id] = {}; }
+    return L;
   }
-  const charMeta = (R, s) => metaVal('sp_' + R.charId + '_' + s);
+  function metaLv(key, charId) { const id = charId || metaChar(), d = metaDef(key, id); return d ? Math.min(d.max, metaLevels(id)[key] | 0) : 0; }
+  /** one-time v6 migration: refund every Mora spent on the old shared map (old cost table), then clear it.
+      Returns the refunded amount (0 if already migrated). G.save.data.metaRefund keeps it for the home notice. */
+  function migrateMeta() {
+    const S = G.save.data; if (!S || S.metaV6) return 0;
+    let refund = 0;
+    const M = S.meta;
+    if (M && typeof M === 'object') for (const k in M) { const lv = Math.max(0, Math.min(50, M[k] | 0)); for (let i = 0; i < lv; i++) refund += G.data.metaCostOld(k, i); }
+    S.mora = Math.max(0, Math.floor(S.mora || 0)) + refund;
+    S.meta = {};
+    if (!S.metaC || typeof S.metaC !== 'object') S.metaC = {};
+    S.metaV6 = true;
+    if (refund > 0) S.metaRefund = refund;
+    try { G.save.write(); } catch (e) { }
+    return refund;
+  }
 
   /* ---------------- elemental resonance ---------------- */
   const RES = {
@@ -102,10 +124,11 @@ G.progression = (function () {
     electro: { name: '高圧の雷', desc: '元素反応でエネルギー回復', el: 'electro' },
     anemo: { name: '迅速の風', desc: '移動速度 +10%・クールタイム -5%', el: 'anemo' },
     geo: { name: '堅牢の岩', desc: 'シールド +15%・与ダメージ +15%', el: 'geo' },
+    dendro: { name: '蔓生の草', desc: '元素反応ダメージ +20%', el: 'dendro' },
     all: { name: '万象の共鳴', desc: 'キャラとランチャー2種で 3つの元素！ 全ダメージ +20%・受けるダメージ -10%', el: 'all' },
   };
   const EARLY_T = 180;
-  const LAUNCH_EL = ['pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo'];
+  const LAUNCH_EL = ['pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo', 'dendro'];
   const ALL_N = 3; // distinct elements needed for 万象の共鳴 (was 4 before the 2-launcher cap)
   function resonanceSet(R) {
     const out = {}; let n = 0;
@@ -122,23 +145,27 @@ G.progression = (function () {
     if (res.cryo) S.critRate += 0.15;
     if (res.anemo) { S.speed *= 1.1; S.cdr += 0.05; }
     if (res.geo) { S.shieldMul *= 1.15; S.dmgBonus += 0.15; }
+    if (res.dendro) S.reactionBonus = (S.reactionBonus || 0) + 0.2;
     if (res.all) { S.dmgBonus += 0.2; S.dmgReduction = 1 - (1 - S.dmgReduction) * 0.9; }
   }
 
   /* ---------------- stats ---------------- */
-  function metaVal(k) { const M = G.save.data.meta || {}, D = G.data.meta[k]; return D ? (M[k] || 0) * D.per : 0; }
+  /** star value for key (levels × per) on charId's own map (default: running / selected character) */
+  function metaVal(k, charId) { const id = charId || metaChar(), D = metaDef(k, id); return D ? metaLv(k, id) * D.per : 0; }
   function baseStats(R) {
-    const ch = R.char, m = metaVal;
+    const ch = R.char, id = R.charId, m = k => metaVal(k, id);
     return {
       atk: ch.atk * (1 + m('power')), maxHp: ch.hp * (1 + m('vitality')), def: (ch.def || 0) + m('defense'),
       speed: ch.speed * (1 + m('speed')), pickup: ch.pickup * (1 + m('gather')),
       critRate: 0.05 + m('crit_rate'), critDmg: 0.5 + m('crit_damage'),
-      recharge: 1 + m('recharge'), haste: 1 + m('haste'), cdr: m('ks_burst') ? 0.08 : 0, areaMul: 1, durationMul: 1,
-      normalInterval: ch.atkInterval || 0.78, range: (ch.range || 13.5) * (1 + m('range')), chargedPeriod: ch.chargedPeriod || 3.4,
-      explosionMul: R.charId === 'amber' ? 2 : 1, // Amber passive: explosion radius ×2 (multiplicative)
+      recharge: 1 + m('recharge'), haste: 1, cdr: 0, areaMul: 1, durationMul: 1,
+      // 天賦の星図 (TALENT): 通常攻撃の速さ shortens the normal interval only; s_cd / q_cd scale the skill / burst cooldowns
+      normalInterval: (ch.atkInterval || 0.78) / (1 + m('n_spd')), skillCdMul: 1 - m('s_cd'), burstCdMul: 1 - m('q_cd'), chargedShot: false,
+      range: (ch.range || 13.5) * (1 + m('range')), chargedPeriod: ch.chargedPeriod || 3.4,
+      explosionMul: 1, // owner 2026-10-03: 爆発範囲 ×1 for everyone
       xpMul: 1 + m('wisdom'), moraMul: 1 + m('mora'), chestMul: 1 + m('chest'),
-      dmgBonus: m('ks_fire'), elBonus: {}, reactionBonus: 0, amplifyBonus: 0, shieldMul: 1, regen: 0, dmgReduction: m('ks_guard') ? 0.08 : 0,
-      projSpeed: 1, extraProjectiles: m('multishot'), revival: ((G.save.data.meta || {}).revival || 0) > 0,
+      dmgBonus: m('ks_fire'), elBonus: {}, reactionBonus: 0, amplifyBonus: 0, shieldMul: 1, regen: 0, dmgReduction: 0,
+      projSpeed: 1, extraProjectiles: id === 'amber' ? 0 : m('n_sp'), revival: m('ks_guard') > 0,
       // PROGRESSION extras (see header)
       normalMul: 1, normalHaste: 1, bunnyMul: 0.75, bunnyCharges: 1, bunnyCdMul: 1, rainMul: 1.8, rainDur: 8,
       extraArrows: 0, extraArrowMul: 0.6, burstBuff: false, shieldRange: 3, shieldDmg: 0.6,
@@ -147,24 +174,29 @@ G.progression = (function () {
   }
 
   /** kit stat keys are absolute values set by upgrades.js mods; when the upgrade is not owned the kit uses its lv0 default */
-  const KIT_DEF = { xqMul: 2.0, xqSkillMul: 2.6, xqBurstMul: 1.2, xqCdMul: 1, ngSkillMul: 2.3, ngGems: 7, cyMul: 2.4, cySkillMul: 3.0, cyBurstMul: 7.0, cyBurstN: 3, cyReach: 3.0 };
+  const KIT_DEF = { xqMul: 1.7, xqSkillMul: 2.6, xqBurstMul: 1.2, xqCdMul: 1, xqRainDR: 0.2, xqRainN: 3, ngSkillMul: 2.3, ngGems: 7, ngWall: 5.6, cyMul: 2.4, cySkillMul: 3.0, cyBurstMul: 7.0, cyBurstN: 3, cyReach: 3.0, cyHaste: 0.15 };
   const kmul = (S, k, m) => { S[k] = (S[k] != null ? S[k] : KIT_DEF[k]) * m; };
   const kadd = (S, k, a) => { S[k] = (S[k] != null ? S[k] : KIT_DEF[k]) + a; };
   function applyCharStars(S, R) {
-    const n = charMeta(R, 'n'), s = charMeta(R, 's'), q = charMeta(R, 'q'), k = charMeta(R, 'k') > 0;
-    switch (R.charId) {
+    // 天賦の星図 kit nodes (TALENT). n = 通常攻撃の威力, s = 元素スキルの威力, sp = スキルの技, k / sk = 通常 / スキルの要の星
+    const id = R.charId, m = key => metaVal(key, id);
+    const n = m('n_dmg'), s = m('s_dmg'), sp = m('s_sp'), k = m('n_ks') > 0, sk = m('s_ks') > 0;
+    S.burstBonus = (S.burstBonus || 0) + m('q_dmg') + (m('ks_burst') > 0 ? 0.2 : 0);
+    switch (id) {
       case 'amber':
-        S.normalDmg = (S.normalDmg || 0) + n; S.bunnyMul *= 1 + s; S.burstBonus = (S.burstBonus || 0) + q;
-        if (k) S.chargedPeriod *= 0.75; break;
+        S.normalDmg = (S.normalDmg || 0) + n; S.bunnyMul *= 1 + s; S.bunnyArea = (S.bunnyArea || 1) * (1 + sp);
+        S.chargedShot = m('n_sp') > 0;                       // 狙い撃ち is locked until its star is bought (owner 2026-10-03)
+        if (k && S.chargedShot) S.chargedPeriod *= 0.75;     // 百発百中
+        if (sk) S.bunnyCharges = Math.max(S.bunnyCharges || 1, 2); break;
       case 'xingqiu':
-        if (n) kmul(S, 'xqMul', 1 + n); if (s) kmul(S, 'xqSkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
-        if (k) kmul(S, 'xqCdMul', 0.85); break;
+        if (n) kmul(S, 'xqMul', 1 + n); if (s) kmul(S, 'xqSkillMul', 1 + s); if (sp) kadd(S, 'xqRainDR', sp);
+        if (k) kmul(S, 'xqCdMul', 0.85); if (sk) kadd(S, 'xqRainN', 2); break;
       case 'ningguang':
-        S.normalDmg = (S.normalDmg || 0) + n; if (s) kmul(S, 'ngSkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
-        if (k) kadd(S, 'ngGems', 3); break;
+        S.normalDmg = (S.normalDmg || 0) + n; if (s) kmul(S, 'ngSkillMul', 1 + s); if (sp) kmul(S, 'ngWall', 1 + sp);
+        if (k) kadd(S, 'ngGems', 3); if (sk) S.ngShatter = true; break;
       case 'chongyun':
-        if (n) kmul(S, 'cyMul', 1 + n); if (s) kmul(S, 'cySkillMul', 1 + s); S.burstBonus = (S.burstBonus || 0) + q;
-        if (k) kmul(S, 'cyReach', 1.15); break;
+        if (n) kmul(S, 'cyMul', 1 + n); if (s) kmul(S, 'cySkillMul', 1 + s); if (sp) kadd(S, 'cyHaste', sp);
+        if (k) kmul(S, 'cyReach', 1.15); if (sk) S.cyFieldMul = 1.3; break;
     }
   }
   function applyConstellation(S, R) {
@@ -181,7 +213,7 @@ G.progression = (function () {
         if (c >= 6) S.burstBuff = true;
         break;
       case 'xingqiu':
-        if (c >= 1) { S.xqRainN = 4; kmul(S, 'xqMul', 1.3); }
+        if (c >= 1) { kadd(S, 'xqRainN', 1); kmul(S, 'xqMul', 1.3); } // 3 → 4 (+2 more with the 虹剣勢 star)
         if (c >= 2) { S.burstDuration = (S.burstDuration || 0) + 3; S.elBonus.hydro = (S.elBonus.hydro || 0) + 0.15; }
         if (c >= 3) kmul(S, 'xqSkillMul', 1.3);
         if (c >= 4) S.xqC4 = 1.5;
@@ -220,7 +252,6 @@ G.progression = (function () {
     if (b.feastUntil > R.time) S.atk *= 2;
     if (S.burstBuff && b.burstBuffUntil > R.time) { S.atk *= 1.15; S.speed *= 1.15; }
     // generous early game: bigger pickup radius (extra boost during the first 3 minutes)
-    S.pickup += 0.25; // owner 2026-09-28: default pickup radius ≈ 1/3 of before (was +1.0, +1.2 early)
     S.critRate = Math.min(1, S.critRate);
     S.recharge = Math.min(3, S.recharge);
     return S;
@@ -232,9 +263,10 @@ G.progression = (function () {
     const ch = G.data.characters[charId]; if (!ch) return null;
     const R = { charId, char: ch, levels: {}, evolved: {}, buffs: {}, time: 0, player: {} };
     if (!(o && o.bare)) return computeStats(R);
-    const S = G.save.data, keep = { meta: S.meta, constellation: S.constellation, relics: S.relics };
-    try { S.meta = {}; S.constellation = {}; S.relics = { unopened: 0, owned: [], equipped: {} }; return computeStats(R); }
-    finally { S.meta = keep.meta; S.constellation = keep.constellation; S.relics = keep.relics; }
+    const S = G.save.data; metaLevels(charId);
+    const keep = { metaC: S.metaC, constellation: S.constellation, relics: S.relics };
+    try { S.metaC = {}; S.constellation = {}; S.relics = { unopened: 0, owned: [], equipped: {} }; return computeStats(R); }
+    finally { S.metaC = keep.metaC; S.constellation = keep.constellation; S.relics = keep.relics; }
   }
 
   /** display rows for a stats object: [{k, name, text, v}] (v = number used to compare two stat sets) */
@@ -263,7 +295,7 @@ G.progression = (function () {
   /* ---------------- run lifecycle ---------------- */
   function initRun(R) {
     R.pendingLevels = 0; R.lastOffer = []; R.offerN = 0; R.sinceLauncher = 0;
-    R.rerolls = 2 + ((G.save.data.meta || {}).reroll || 0);
+    R.rerolls = 2 + metaLv('reroll', R.charId);
     R.buffs = R.buffs || {};
     R.resonanceSeen = {};
     R.shieldAuraT = 0; R.elecResT = 0;
@@ -272,12 +304,15 @@ G.progression = (function () {
   }
 
   function addXp(R, v) {
-    const p = R.player; p.xp += v;
+    const p = R.player;
+    if (R.bossDefeated) { p.xp = Math.min(p.xpNeed - 0.001, p.xp + v); return; } // v6: after the god falls, XP never levels up
+    p.xp += v;
     let guard = 0;
     while (p.xp >= p.xpNeed && guard++ < 50) { p.xp -= p.xpNeed; p.level++; p.xpNeed = G.data.xpNeed(p.level); R.pendingLevels++; }
   }
 
   function update(R, dt) {
+    if (R.bossDefeated) R.pendingLevels = 0; // v6: no level-up cards once the stage's god is down
     if (R.pendingLevels > 0 && !G.game.isPaused() && !R.over) {
       R.pendingLevels--;
       G.bus.emit('levelUp', R.player.level);
@@ -298,9 +333,9 @@ G.progression = (function () {
   /* ---------------- star-map keystones applied at the start of a run ---------------- */
   function metaStart(R) {
     R.metaStartDone = true;
-    const M = G.save.data.meta || {}, p = R.player;
-    if (M.ks_guard > 0 && p && p.maxHp) { G.player.addShield(R, p.maxHp * 0.3, 30); G.bus.emit('shield', 'geo'); }
-    if (M.ks_burst > 0 && p && R.char) { p.energy = R.char.energyCost; }
+    const p = R.player;
+    if (metaLv('ks_guard', R.charId) > 0 && p && p.maxHp) { G.player.addShield(R, p.maxHp * 0.3, 30); G.bus.emit('shield', 'geo'); }
+    if (metaLv('ks_burst', R.charId) > 0 && p && R.char) { p.energy = R.char.energyCost; }
   }
 
   /* ---------------- ★5 blessings (天啓カード) runtime — public APIs only ---------------- */
@@ -654,7 +689,7 @@ G.progression = (function () {
 
   const api = {
     computeStats, previewStats, statRows, initRun, addXp, update, available, makeOffer, reroll, apply, openLevelUp, openChest, evoReady, rollChest, resolveChoice, newLaunchers,
-    def, resonance: RES, constellations: CONST, constellationsOf, constellationLevel, setConstellation, metaDef, metaTree, applyCharStars, applyConstellation, checkResonance, checkEvoReady, blessingPool, metaVal, shieldAuraByCombat: false,
+    def, resonance: RES, constellations: CONST, constellationsOf, constellationLevel, setConstellation, metaDef, metaTree, metaLevels, metaLv, metaChar, migrateMeta, applyCharStars, applyConstellation, checkResonance, checkEvoReady, blessingPool, metaVal, shieldAuraByCombat: false,
   };
   return api;
 })();

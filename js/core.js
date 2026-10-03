@@ -3,7 +3,7 @@
 'use strict';
 var G = window.G = window.G || {};
 
-G.VERSION = '2.0.0-web';
+G.VERSION = '6.0.0';
 G.cfg = {
   step: 1 / 60,            // fixed simulation step
   enemyHpMul: 2,           // global enemy HP multiplier (owner request 2026-09-27: x2)
@@ -155,7 +155,7 @@ G.assets = (function () {
   for (const a in actors) list.push(['actor_' + a, 'assets/actor_' + a + '.webp']);
   ['amber', 'amber_arrow', 'archer', 'bomb', 'bottle', 'brute', 'bunny', 'chest', 'chicken', 'chongyun', 'crystal', 'feast',
     'hilichurl', 'lightning', 'mora', 'ningguang', 'rain', 'relic', 'rock', 'ruin', 'shaman', 'slime', 'snow', 'venti', 'wind',
-    'xingqiu', 'feather', 'vfx_auras', 'vfx_status', 'enemy_aura', 'vfx_embers', 'vfx_water', 'vfx_wind']
+    'xingqiu', 'feather', 'vfx_auras', 'vfx_status', 'enemy_aura', 'vfx_embers', 'vfx_water', 'vfx_wind', 'seedpod']
     .forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
   list.push(['fx_explosion', 'assets/fx_explosion.webp'], ['cutin_amber', 'assets/cutin_amber.webp'],
     ['cutin_xingqiu', 'assets/cutin_xingqiu.webp'], ['cutin_ningguang', 'assets/cutin_ningguang.webp'], ['cutin_chongyun', 'assets/cutin_chongyun.webp'],
@@ -163,7 +163,10 @@ G.assets = (function () {
     ['paimon_flight', 'assets/paimon_flight.webp'],
     ['title_bg', 'assets/title_bg.webp'], ['floor', 'assets/floor.webp']);
   // ability icons (owner: ICON, tools/draw_ability_icons.py): icon_ab_<upgrade key>.webp — HUD owned-skill slots draw these
-  ['ab_amber_arrows', 'ab_amber_burst', 'ab_amber_normal', 'ab_amber_pierce', 'ab_amber_skill', 'ab_attack', 'ab_bless_dandelion', 'ab_bless_favonius', 'ab_bless_firework', 'ab_bless_meteor', 'ab_bless_mora', 'ab_bless_scout', 'ab_crit_damage', 'ab_crit_rate', 'ab_cy_arc', 'ab_cy_burst', 'ab_cy_combo', 'ab_cy_power', 'ab_cy_skill', 'ab_defense', 'ab_evo_amber_burst', 'ab_evo_amber_normal', 'ab_evo_amber_skill', 'ab_evo_cy_normal', 'ab_evo_launcher_anemo', 'ab_evo_launcher_cryo', 'ab_evo_launcher_electro', 'ab_evo_launcher_geo', 'ab_evo_launcher_hydro', 'ab_evo_launcher_pyro', 'ab_evo_ng_normal', 'ab_evo_xq_normal', 'ab_explosion_radius', 'ab_harvest', 'ab_haste', 'ab_hp', 'ab_ng_burst', 'ab_ng_gems', 'ab_ng_power', 'ab_ng_skill', 'ab_recharge', 'ab_shield_damage', 'ab_shield_hp', 'ab_shield_range', 'ab_speed', 'ab_xq_blades', 'ab_xq_burst', 'ab_xq_power', 'ab_xq_skill', 'ab_xq_spin'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
+  ['ab_amber_arrows', 'ab_amber_burst', 'ab_amber_normal', 'ab_amber_pierce', 'ab_amber_skill', 'ab_attack', 'ab_bless_dandelion', 'ab_bless_favonius', 'ab_bless_firework', 'ab_bless_meteor', 'ab_bless_mora', 'ab_bless_scout', 'ab_crit_damage', 'ab_crit_rate', 'ab_cy_arc', 'ab_cy_burst', 'ab_cy_combo', 'ab_cy_power', 'ab_cy_skill', 'ab_defense', 'ab_evo_amber_burst', 'ab_evo_amber_normal', 'ab_evo_amber_skill', 'ab_evo_cy_normal', 'ab_evo_launcher_anemo', 'ab_evo_launcher_cryo', 'ab_evo_launcher_dendro', 'ab_evo_launcher_electro', 'ab_evo_launcher_geo', 'ab_evo_launcher_hydro', 'ab_evo_launcher_pyro', 'ab_evo_ng_normal', 'ab_evo_xq_normal', 'ab_explosion_radius', 'ab_harvest', 'ab_haste', 'ab_hp', 'ab_ng_burst', 'ab_ng_gems', 'ab_ng_power', 'ab_ng_skill', 'ab_recharge', 'ab_shield_damage', 'ab_shield_hp', 'ab_shield_range', 'ab_speed', 'ab_xq_blades', 'ab_xq_burst', 'ab_xq_power', 'ab_xq_skill', 'ab_xq_spin'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
+  // relic piece icons (owner: RELIC, tools/build_relic_icons.py): relic_<set>_<slot>.webp + relic_box.webp
+  ['wind', 'flame', 'luck'].forEach(s => ['flower', 'plume', 'sands', 'goblet', 'circlet'].forEach(n => list.push(['relic_' + s + '_' + n, 'assets/relic_' + s + '_' + n + '.webp'])));
+  list.push(['relic_box', 'assets/relic_box.webp']);
   // v5 stages (owner: STAGE): boss icons, stage floors, stage landscapes (UI stage select / intro)
   ['zhongli', 'raiden', 'nahida'].forEach(n => list.push(['icon_' + n, 'assets/icon_' + n + '.webp']));
   ['fx_meteor', 'fx_rock_pillar', 'fx_lightning_slash', 'fx_dendro_burst', 'fx_dream_pattern'].forEach(n => list.push([n, 'assets/' + n + '.webp']));

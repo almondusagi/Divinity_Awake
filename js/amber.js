@@ -20,25 +20,66 @@
   function arrowMul(R) { const S = R.stats; return (S.normalMul != null ? S.normalMul : 1.2 + 0.4 * lv(R, 'amber_normal')) * (1 + (S.normalDmg || 0)); }
   function arrowRate(R) { const S = R.stats; return S.normalHaste != null ? S.normalHaste : 1 + 0.08 * lv(R, 'amber_normal'); }
 
+  /* arrow look (owner v6, DENDRO): the arrow sprite itself + a thin red-orange aura hugging its silhouette
+     (pre-rendered once from the sprite's alpha) + a short ember streak behind the fletching that fades fast.
+     (was: stretched glow blobs over the shaft that read as a lumpy fire blob) */
+  let auraSpr = null;
+  const AURA_PAD = 0.16;               // aura margin around the sprite (fraction of sprite width)
+  function arrowAura() {
+    if (auraSpr) return auraSpr;
+    const im = G.assets.img.icon_amber_arrow; if (!im || !im.width) return null;
+    const W0 = 128, H0 = Math.round(W0 * im.height / im.width), pad = Math.round(W0 * AURA_PAD);
+    const sil = G.assets.makeCanvas(W0, H0), sx = sil.getContext('2d');
+    sx.drawImage(im, 0, 0, W0, H0); sx.globalCompositeOperation = 'source-in'; sx.fillStyle = '#ffffff'; sx.fillRect(0, 0, W0, H0);
+    const c = G.assets.makeCanvas(W0 + pad * 2, H0 + pad * 2), x = c.getContext('2d'), OFF = 4000;
+    // shadowBlur (works on every browser, unlike ctx.filter): draw far off-canvas, shift only the blurred shadow back
+    const ring = (col, blur, n) => { x.save(); x.shadowColor = col; x.shadowBlur = blur; x.shadowOffsetX = OFF; for (let i = 0; i < n; i++) x.drawImage(sil, pad - OFF, pad); x.restore(); };
+    ring('rgba(255,60,20,1)', 11, 3);     // wide soft red halo
+    ring('rgba(255,150,60,1)', 3.5, 2);   // tight bright orange rim
+    x.globalCompositeOperation = 'destination-out'; x.globalAlpha = 0.85; x.drawImage(sil, pad, pad); // keep the arrow's own colours clean
+    auraSpr = { c, kx: c.width / W0, ky: c.height / H0 };
+    return auraSpr;
+  }
+  let emberSpr = null;
+  function emberStreak() { // horizontal tapered streak: bright at the right end (the fletching), fading to the left
+    if (emberSpr) return emberSpr;
+    const w = 128, h = 32, c = G.assets.makeCanvas(w, h), x = c.getContext('2d');
+    x.beginPath(); x.moveTo(w, h * 0.18); x.quadraticCurveTo(w * 0.35, h * 0.47, 0, h * 0.5); x.quadraticCurveTo(w * 0.35, h * 0.53, w, h * 0.82); x.closePath();
+    const g = x.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, 'rgba(255,60,20,0)'); g.addColorStop(0.55, 'rgba(255,70,25,0.5)'); g.addColorStop(0.9, 'rgba(255,130,60,0.85)'); g.addColorStop(1, 'rgba(255,190,120,0.6)');
+    x.fillStyle = g; x.fill();
+    emberSpr = c; return c;
+  }
   function drawArrow(ctx, p) {
     const a = Math.atan2(p.vy, p.vx), y = p.y - 0.9, evo = p.evo;
     const grow = Math.min(1, p.t * 9);
+    const im = G.assets.img.icon_amber_arrow;
+    const s = p.size, h = im ? s * im.height / im.width : s * 0.25;
     ctx.save(); ctx.translate(p.x, y); ctx.rotate(a);
     ctx.globalCompositeOperation = 'lighter';
-    const L = (evo ? 3.2 : 2.3) * grow;
-    ctx.globalAlpha = 0.7; ctx.drawImage(glow(evo ? '#ff4a1a' : '#ff7a3d', 64), -L + 0.2, evo ? -0.42 : -0.3, L + 0.4, evo ? 0.84 : 0.6);
-    ctx.globalAlpha = 0.95; ctx.drawImage(glow('#ffe0a0', 32), -L * 0.45, -0.13, L * 0.45 + 0.55, 0.26);
+    // short ember streak behind the fletching (the sprite's tail sits at about -0.44·s)
+    const tail = -s * 0.42, L = (evo ? 1.1 : 0.7) * s * grow, th = evo ? 0.2 : 0.13;
+    if (L > 0.01) { ctx.globalAlpha = 0.85; ctx.drawImage(emberStreak(), tail - L, -th / 2, L, th); }
+    // aura hugging the arrow silhouette (gentle flicker)
+    const au = arrowAura();
+    if (au) {
+      const fl = 0.85 + 0.15 * Math.sin(p.t * 50 + p.x * 3), k = evo ? 1.15 : 1;
+      ctx.globalAlpha = (evo ? 1 : 0.9) * fl;
+      const aw = s * au.kx * k, ah = h * au.ky * k;
+      ctx.drawImage(au.c, -aw / 2, -ah / 2, aw, ah);
+    }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-    const im = G.assets.img.icon_amber_arrow;
-    if (im) { const s = p.size, h = s * im.height / im.width; ctx.drawImage(im, -s / 2, -h / 2, s, h); }
+    if (im) ctx.drawImage(im, -s / 2, -h / 2, s, h);
     ctx.restore();
   }
 
   function arrowUpdate(R, dt, p) {
-    if (G.fx.trail && p.px != null && !reduced()) G.fx.trail(p.px, p.py - 0.9, p.x, p.y - 0.9, p.evo ? '#ff5a1a' : '#ff9a3d', p.evo ? 0.26 : 0.18);
+    // 爆炎の矢 keeps its fire trail (starting behind the fletching); the normal arrow only sheds a few quick embers
+    const back = (p.size || 1.1) * 0.45, dx = p.dx || 0, dy = p.dy || 0;
+    if (p.evo && G.fx.trail && p.px != null && !reduced()) G.fx.trail(p.px - dx * back, p.py - 0.9 - dy * back, p.x - dx * back, p.y - 0.9 - dy * back, '#ff5a1a', 0.2);
     p.px = p.x; p.py = p.y;
-    const n = reduced() ? 0.15 : p.evo ? 0.9 : 0.5;
-    if (U.rnd() < n) G.fx.particle({ x: p.x - p.dx * 0.3 + U.rand(-0.08, 0.08), y: p.y - 0.9 - p.dy * 0.3 + U.rand(-0.08, 0.08), vx: -p.vx * 0.06 + U.rand(-0.6, 0.6), vy: -p.vy * 0.06 + U.rand(-1.2, 0.2), life: U.rand(0.18, 0.38), size: U.rand(0.05, p.evo ? 0.13 : 0.09), color: U.chance(0.5) ? '#ffb347' : '#ff6a2a', glow: true, drag: 4 });
+    const n = reduced() ? 0.1 : p.evo ? 0.7 : 0.3;
+    if (U.rnd() < n) G.fx.particle({ x: p.x - dx * back + U.rand(-0.05, 0.05), y: p.y - 0.9 - dy * back + U.rand(-0.05, 0.05), vx: -p.vx * 0.05 + U.rand(-0.4, 0.4), vy: -p.vy * 0.05 + U.rand(-0.8, 0.2), life: U.rand(0.1, 0.22), size: U.rand(0.04, p.evo ? 0.1 : 0.06), color: U.chance(0.5) ? '#ffb347' : '#ff6a2a', glow: true, drag: 5 });
   }
 
   let lastEvoBoom = -1;
@@ -163,8 +204,8 @@
   /* ============================ SKILL: BARON BUNNY ============================ */
   // S.bunnyCharges (PROGRESSION) is the TOTAL (1, or 2 with C4 / evo_amber_skill)
   function maxCharges(R) { return Math.max(R.stats.bunnyCharges || 1, R.evolved.evo_amber_skill ? 2 : 1); }
-  const SKILL_CD = 18;
-  function skillCdBase(R) { return SKILL_CD * (R.stats.bunnyCdMul || 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
+  const SKILL_CD = 20;
+  function skillCdBase(R) { return SKILL_CD * (R.stats.bunnyCdMul || 1) * (R.stats.skillCdMul || 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
 
   // S.bunnyMul (PROGRESSION: 5→13.75, C2/C3 baked in); fallback only if absent
   function bunnyMul(R) { const S = R.stats; return (S.bunnyMul != null ? S.bunnyMul : 8 + 2.5 * lv(R, 'amber_skill')) * (1 + (S.bunnyDmg || 0)); }
@@ -196,14 +237,14 @@
     G.fx.ring && G.fx.ring(b.x, b.y, 1.1, '#ffd9b0');
     if (idx === 0) G.fx.reactionText && G.fx.reactionText(b.x, b.y - 2.1, b.evo ? '伯爵大行進！' : 'ちょうはつ！', '#ffc4d8');
     if (idx === 0 && b.evo) { // 伯爵大行進: the landing already goes off
-      const r = BUNNY_BASE_R * R.stats.explosionMul * 0.5;
+      const r = BUNNY_BASE_R * R.stats.explosionMul * (R.stats.bunnyArea || 1) * 0.5;
       G.fx.explosion(b.x, b.y, r, { color: '#ff8a3d', kind: 'hop' });
       G.combat.aoe(R, b.x, b.y, r, { mul: bunnyMul(R) * 0.35, element: 'pyro', gauge: 1, src: 'evo_amber_skill', knock: 1.2 });
     }
     if (idx === 1 || idx === 2) {
       G.fx.reactionText && G.fx.reactionText(b.x, b.y - 1.9, 'ぴょん', '#ffc4d8');
       if (b.evo) { // 伯爵大行進: every hop explodes
-        const r = BUNNY_BASE_R * R.stats.explosionMul * 0.55;
+        const r = BUNNY_BASE_R * R.stats.explosionMul * (R.stats.bunnyArea || 1) * 0.55;
         G.fx.explosion(b.x, b.y, r, { color: '#ff8a3d', kind: 'hop' });
         G.combat.aoe(R, b.x, b.y, r, { mul: bunnyMul(R) * 0.4, element: 'pyro', gauge: 1, src: 'evo_amber_skill', knock: 1.4 });
         G.audio.sfx('explosion', { x: b.x, y: b.y });
@@ -246,7 +287,7 @@
 
   function bunnyExplode(R, b) {
     const S = R.stats;
-    const r = BUNNY_BASE_R * S.explosionMul * (b.evo ? 1.3 : 1);
+    const r = BUNNY_BASE_R * S.explosionMul * (S.bunnyArea || 1) * (b.evo ? 1.3 : 1); // 天賦「伯爵の大爆発」
     G.fx.explosion(b.x, b.y, r, { color: '#ff7a3d', kind: 'big' });
     W.boom(R, b.x, b.y, r * 0.55, { color: '#ffb347', life: 0.55 });
     G.fx.shake(1.1); G.fx.hitstop(0.05);
@@ -334,7 +375,7 @@
   function castBurst(R) {
     const p = R.player, S = R.stats, L = lv(R, 'amber_burst'), evo = !!R.evolved.evo_amber_burst;
     const cx = p.x, cy = p.y; // FIXED at cast position (spec)
-    const r = 7 * S.explosionMul / 2 * (evo ? 1.4 : 1) * (S.burstArea || 1);
+    const r = 7 * S.explosionMul * (evo ? 1.4 : 1) * (S.burstArea || 1);
     const life = ((S.rainDur != null ? S.rainDur : 8 + 0.5 * L) + (S.burstDuration || 0)) * (S.durationMul || 1);
     G.player.pose(R, 'burst', 0.6, { x: 0, y: -1 });
     // cut-in (+ its slowmo) and the 'burst' sfx are fired from the 'burst' bus event emitted by G.weapons.tryBurst
@@ -456,7 +497,7 @@
         if (!R.atkOff && fireArrows(R)) Ws.arrowT = (S.normalInterval || 0.78) * (S.featherCd || 1) / (Math.max(0.2, S.haste) * arrowRate(R));
         else Ws.arrowT = 0.1;
       }
-      if (!R.atkOff) updateCharged(R, dt);
+      if (!R.atkOff && S.chargedShot) updateCharged(R, dt); // 狙い撃ち: only after its 天賦の星図 star (owner 2026-10-03)
       // bunny charges
       const mc = maxCharges(R);
       if (Ws.bunnyCharges == null) { Ws.bunnyCharges = mc; Ws.bunnyMax = mc; }

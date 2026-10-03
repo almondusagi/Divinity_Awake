@@ -338,10 +338,11 @@ G.audio = (function () {
       Bell(v, 1318, 0.05, 0.6, 0.11); Bell(v, 1976, 0.11, 0.6, 0.09);
       Smp(v, 'crash', 0.02, 0.14);
     },
-    bossDeath(v) {
+    bossDeath(v, o) {
       SFX.bigExplosion(v);
       T(v, { type: 'sawtooth', f: 240, f2: 38, d: 2.2, vol: 0.12, lp: 1400, lp2: 200 });   // mechanical groan
       Smp(v, 'crash', 0.05, 0.35); Smp(v, 'taiko', 0, 0.8);
+      if (o && o.somber) { Bell(v, 293.7, 0.45, 2.6, 0.07); Bell(v, 349.2, 0.62, 2.6, 0.05); Bell(v, 440, 0.8, 2.8, 0.04); return; } // v6 god's end: no fanfare
       [60, 64, 67, 72, 76].forEach((m, i) => Brass(v, m, 0.55 + i * 0.02, 1.2, 0.05, 0.8));
       sparkles(v, 8, 0.6, 1.2, 1800, 4200, 0.07);
       duck(0.6, 2.4);
@@ -1389,8 +1390,36 @@ G.audio = (function () {
     return btoa(s);
   }
 
+  /* v6: soft rain ambience after a god falls (looped pink noise, band-limited, on the SFX bus; quiet) */
+  let rainN = null;
+  function rain(on) {
+    if (!ctx || !A) return;
+    const t = ctx.currentTime;
+    if (on) {
+      if (rainN) return;
+      const nodes = [];
+      const mk = (buf, type, f, q, vol) => {
+        const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = 0; src.playbackRate.value = 0.97 + Math.random() * 0.06;
+        const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+        const g = ctx.createGain(); g.gain.value = vol;
+        src.connect(fl); fl.connect(g); nodes.push(src, fl, g); return { src, g };
+      };
+      const hiss = mk(A.B.pink, 'bandpass', 2600, 0.45, 0.85), body = mk(A.B.brown, 'lowpass', 520, 0.7, 0.35);
+      const out = ctx.createGain(); out.gain.value = 0; out.gain.setTargetAtTime(0.07, t, 1.4);
+      hiss.g.connect(out); body.g.connect(out); out.connect(A.sfxVol); nodes.push(out);
+      hiss.src.start(t, Math.random()); body.src.start(t, Math.random());
+      rainN = { out, srcs: [hiss.src, body.src], nodes };
+    } else if (rainN) {
+      const r = rainN; rainN = null;
+      r.out.gain.cancelScheduledValues(t); r.out.gain.setValueAtTime(r.out.gain.value, t); r.out.gain.setTargetAtTime(0, t, 0.6);
+      r.srcs.forEach(s => { try { s.stop(t + 3); } catch (e) { } });
+      r.srcs[0].onended = () => r.nodes.forEach(n => { try { n.disconnect(); } catch (e) { } });
+    }
+  }
+
   return {
-    init, applySettings, sfx, bgm, duck,
+    init, applySettings, sfx, bgm, duck, rain,
+    get raining() { return !!rainN; },
     get ctx() { return ctx; },
     get track() { return cur ? cur.name : null; },
     get intensity() { return cur ? cur.I : 0; },

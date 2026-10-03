@@ -275,8 +275,8 @@
   }
 
   /* ============================ SKILL: 古華剣・画雨籠山 ============================ */
-  const SKILL_CD = 14;
-  function skillCdBase(R) { return SKILL_CD * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
+  const SKILL_CD = 16;
+  function skillCdBase(R) { return SKILL_CD * (R.stats.skillCdMul || 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
   // C4 (constellation, R.stats.xqC4): while 裁雨留虹 is raining the skill hits harder
   function skillMul(R) { return st(R, 'xqSkillMul', 2.6) * (R.stats.xqC4 && R.time < (R.wstate.xqBurstUntil || 0) ? R.stats.xqC4 : 1); }
 

@@ -10,25 +10,45 @@ G.relics = (function () {
   const SLOTS = [
     { id: 'flower', name: '生の花', glyph: 'flower', mains: ['hp_flat'] },
     { id: 'plume', name: '死の羽', glyph: 'plume', mains: ['atk_flat'] },
-    { id: 'sands', name: '時の砂', glyph: 'sands', mains: ['atk_pct', 'atk_pct', 'hp_pct', 'er', 'speed'] },
-    { id: 'goblet', name: '空の杯', glyph: 'goblet', mains: ['pyro', 'pyro', 'atk_pct', 'hp_pct', 'def_flat'] },
-    { id: 'circlet', name: '理の冠', glyph: 'circlet', mains: ['cr', 'cd', 'atk_pct', 'hp_pct'] },
+    { id: 'sands', name: '時の砂', glyph: 'sands', mains: ['atk_pct', 'def_pct', 'hp_pct', 'er'] },
+    { id: 'goblet', name: '空の杯', glyph: 'goblet', mains: ['atk_pct', 'def_pct', 'hp_pct', 'pyro'] },
+    { id: 'circlet', name: '理の冠', glyph: 'circlet', mains: ['atk_pct', 'def_pct', 'hp_pct', 'cr', 'cd'] },
   ];
+  /* owner 2026-10-03: メインOPは原神と同様 (no 元素熟知 in this game). Genshin-like drop weights per slot. */
+  const MAIN_W = {
+    flower: { hp_flat: 1 }, plume: { atk_flat: 1 },
+    sands: { atk_pct: 27, def_pct: 27, hp_pct: 27, er: 10 },
+    goblet: { atk_pct: 21, def_pct: 21, hp_pct: 21, pyro: 12 },          // pyro = the character's OWN element
+    circlet: { atk_pct: 22, def_pct: 22, hp_pct: 22, cr: 10, cd: 10 },
+  };
   const SLOT = {}; SLOTS.forEach(s => { SLOT[s.id] = s; });
   // name, pct?, main value (★5), substat roll range (★5), score weight
   const ST = {
     hp_flat: { n: 'HP', main: 400, sub: [25, 40], w: 0.25 },
     atk_flat: { n: '攻撃力', main: 40, sub: [3, 5], w: 0.6 },
-    def_flat: { n: '防御力', main: 35, sub: [4, 7], w: 0.3 },
+    def_flat: { n: '防御力', main: 35, sub: [4, 7], w: 0.3 },              // sub only (old saves: goblet main → def_pct)
+    def_pct: { n: '防御力', pct: 1, main: 0.375, sub: [0.051, 0.073], w: 0.3 },
     atk_pct: { n: '攻撃力', pct: 1, main: 0.30, sub: [0.041, 0.058], w: 1 },
     hp_pct: { n: 'HP', pct: 1, main: 0.30, sub: [0.041, 0.058], w: 0.4 },
     er: { n: 'チャージ効率', pct: 1, main: 0.35, sub: [0.045, 0.065], w: 0.5 },
     cr: { n: '会心率', pct: 1, main: 0.20, sub: [0.027, 0.039], w: 1 },
     cd: { n: '会心ダメージ', pct: 1, main: 0.40, sub: [0.054, 0.078], w: 1 },
     pyro: { n: '炎元素ダメージ', pct: 1, main: 0.30, sub: null, w: 0.9, own: true }, // key kept for old saves: = the character's OWN element
-    speed: { n: '移動速度', pct: 1, main: 0.12, sub: [0.015, 0.025], w: 0.5 },
+    speed: { n: '移動速度', pct: 1, main: 0.12, sub: [0.015, 0.025], w: 0.5 },  // retired (old saves are migrated in data())
   };
-  const SUBS = ['hp_flat', 'atk_flat', 'def_flat', 'atk_pct', 'hp_pct', 'er', 'cr', 'cd', 'speed'];
+  // Genshin substat pool & weights (flat 6, % 4, ER 4, crit 3). 移動速度 is no longer a substat.
+  const SUB_W = { hp_flat: 6, atk_flat: 6, def_flat: 6, atk_pct: 4, hp_pct: 4, def_pct: 4, er: 4, cr: 3, cd: 3 };
+  const SUBS = Object.keys(SUB_W);
+  /** ★4 = ★5 ÷ 2 (main value and substat roll range) — owner 2026-10-03 */
+  const RMUL = r => (r === 5 ? 1 : 0.5);
+  const mainVal = (k, rarity) => ST[k].main * RMUL(rarity);
+  function wpick(w, ex) {
+    let tot = 0; for (const k in w) if (!ex || !ex.includes(k)) tot += w[k];
+    let x = U.rand(0, tot);
+    for (const k in w) { if (ex && ex.includes(k)) continue; x -= w[k]; if (x <= 0) return k; }
+    for (const k in w) if (!ex || !ex.includes(k)) return k;
+    return null;
+  }
   const SETS = {
     wind: { name: '風跡の騎士', c: '#5cf2c8', b2: '攻撃力 +18%', b4: '元素爆発ダメージ +35%' },
     flame: { name: '烈火の狩人', c: '#ff7a3d', b2: '炎元素ダメージ +15%', b4: '爆発範囲 ×1.25・元素反応ダメージ +40%' },
@@ -55,27 +75,58 @@ G.relics = (function () {
     if (!Array.isArray(r.owned)) r.owned = [];
     if (!r.equipped || typeof r.equipped !== 'object') r.equipped = {};
     r.owned = r.owned.filter(p => p && SLOT[p.slot] && p.main && ST[p.main.k] && Array.isArray(p.subs));
+    migrate(r);
     for (const s in r.equipped) if (!r.owned.some(p => p.id === r.equipped[s])) delete r.equipped[s];
     if (!r.nextId) r.nextId = r.owned.reduce((m, p) => Math.max(m, p.id | 0), 0) + 1;
     return r;
   }
   const byId = id => data().owned.find(p => p.id === id);
+  /** piece icon image (tools/build_relic_icons.py): assets/relic_<set>_<slot>.webp */
+  const iconSrc = p => 'assets/relic_' + (SETS[p.set] ? p.set : 'wind') + '_' + p.slot + '.webp';
+  const icon = (p, cls) => `<img class="pg-ricon${cls ? ' ' + cls : ''}" src="${iconSrc(p)}" width="96" height="96" alt="" draggable="false">`;
+  /* v6 save migration (never deletes owned pieces):
+     - main stat not allowed for the slot any more (def_flat goblet, speed sands, …) → nearest valid main at its ★ value
+     - 移動速度 / duplicate substats → an unused Genshin substat, same share of its roll range
+     - once (flag v6half): ★4 values were ★5×0.78 → now ★5×0.5 */
+  const MAIN_MAP = { def_flat: 'def_pct', speed: 'atk_pct', atk_flat: 'atk_pct', hp_flat: 'hp_pct' };
+  function migrate(r) {
+    const half = !r.v6half;
+    for (const p of r.owned) {
+      if (p.rarity !== 4 && p.rarity !== 5) p.rarity = p.rarity >= 5 ? 5 : 4;
+      const W = MAIN_W[p.slot];
+      if (!W[p.main.k]) {
+        let k = MAIN_MAP[p.main.k]; if (!W[k]) k = Object.keys(W)[0];
+        p.main = { k, v: mainVal(k, p.rarity) };
+      } else if (half && p.rarity === 4) p.main.v = mainVal(p.main.k, 4);
+      const used = [p.main.k];
+      p.subs = p.subs.filter(x => x && ST[x.k] && typeof x.v === 'number');
+      for (const x of p.subs) {
+        if (half && p.rarity === 4) x.v = round(x.k, x.v / 0.78 * 0.5);
+        if (!SUB_W[x.k] || used.includes(x.k)) {
+          const nk = SUBS.find(k => !used.includes(k) && !p.subs.some(y => y !== x && y.k === k));
+          if (!nk) { x.k = null; continue; }
+          x.v = round(nk, x.v / ST[x.k].sub[1] * ST[nk].sub[1]); x.k = nk;
+        }
+        used.push(x.k);
+      }
+      p.subs = p.subs.filter(x => x.k).slice(0, 4);
+    }
+    if (half) r.v6half = 1;
+  }
 
   /* ---------------- generation ---------------- */
   function roll(slotId, rarity) {
-    const sl = SLOT[slotId], mul = rarity === 5 ? 1 : 0.78;
-    const mk = U.pick(sl.mains);
-    const piece = { slot: slotId, set: U.pick(SET_KEYS), rarity, main: { k: mk, v: ST[mk].main * mul }, subs: [], lock: false };
+    const mul = RMUL(rarity);
+    const mk = wpick(MAIN_W[slotId]);
+    const piece = { slot: slotId, set: U.pick(SET_KEYS), rarity, main: { k: mk, v: mainVal(mk, rarity) }, subs: [], lock: false };
     const nSub = rarity === 5 ? (U.chance(0.35) ? 4 : 3) : U.randi(1, 3);
-    const pool = SUBS.filter(k => k !== mk);
-    U.shuffle(pool);
-    for (let i = 0; i < nSub; i++) { const k = pool[i]; piece.subs.push({ k, v: U.rand(ST[k].sub[0], ST[k].sub[1]) * mul }); }
+    const used = [mk];
+    for (let i = 0; i < nSub; i++) { const k = wpick(SUB_W, used); used.push(k); piece.subs.push({ k, v: U.rand(ST[k].sub[0], ST[k].sub[1]) * mul }); }
     // bonus upgrade rolls (as if levelled) — the dopamine part
     const extra = rarity === 5 ? U.randi(2, 4) : U.randi(0, 2);
     for (let i = 0; i < extra; i++) { const s = U.pick(piece.subs); s.v += U.rand(ST[s.k].sub[0], ST[s.k].sub[1]) * mul; }
     for (const s of piece.subs) s.v = round(s.k, s.v);
-    piece.main.v = round(mk, piece.main.v);
-    return piece;
+    return piece;                                   // main.v stays exact (★4 = ★5 ÷ 2, e.g. 防御力 18.75%)
   }
   function round(k, v) { return ST[k].pct ? Math.round(v * 1000) / 1000 : Math.round(v); }
   function score(p) {
@@ -90,7 +141,7 @@ G.relics = (function () {
     r.unopened--;
     const out = [];
     for (const sl of SLOTS) {
-      const p = roll(sl.id, U.chance(0.4) ? 5 : 4); p.id = r.nextId++; r.owned.push(p);
+      const p = roll(sl.id, U.chance(0.2) ? 5 : 4); p.id = r.nextId++; r.owned.push(p);   // ★5 20% (owner 2026-10-03)
       const prev = byId(r.equipped[sl.id]);
       const better = !prev || score(p) > score(prev);
       if (better) r.equipped[sl.id] = p.id;
@@ -167,6 +218,7 @@ G.relics = (function () {
     S.atk = (S.atk + (t.atk_flat || 0)) * (1 + (t.atk_pct || 0));
     S.maxHp = (S.maxHp + (t.hp_flat || 0)) * (1 + (t.hp_pct || 0));
     S.def += t.def_flat || 0;
+    S.def *= 1 + (t.def_pct || 0);
     S.recharge += t.er || 0;
     S.critRate += t.cr || 0;
     S.critDmg += t.cd || 0;
@@ -189,6 +241,16 @@ G.relics = (function () {
     return { stats: Object.keys(t).map(k => ({ k, name: ST[k].n, text: label(k, t[k]) })), sets: Object.keys(sets).map(s => ({ key: s, name: SETS[s].name, count: sets[s], b2: setText(s, 'b2'), b4: setText(s, 'b4') })) };
   }
 
+  /** shrink all reveal-card text by one shared factor until nothing overflows (same look on every card) */
+  function fitReveal(wrap) {
+    if (!wrap || !wrap.isConnected || !wrap.offsetHeight) return;
+    const over = () => [...wrap.querySelectorAll('.pg-rvbody')].some(b => b.scrollHeight > b.clientHeight + 1)
+      || [...wrap.querySelectorAll('.pg-rvname,.pg-rvset,.pg-rvmain,.pg-rvsubs li')].some(n => n.scrollWidth > n.clientWidth + 0.5);
+    let k = 1, g = 0; wrap.style.setProperty('--rvk', k);
+    while (over() && k > 0.5 && g++ < 30) { k = Math.round((k - 0.03) * 100) / 100; wrap.style.setProperty('--rvk', k); }
+    return k;
+  }
+
   /* ---------------- panel ---------------- */
   function renderPanel(container, charId) {
     const UI = G.progressionUI; UI.ensureCss();
@@ -204,7 +266,7 @@ G.relics = (function () {
       if (!p) { b.className = 'pg-rp empty'; b.innerHTML = `<div class="pg-rg">${glyph(SLOT[o.slot].glyph)}</div><div class="pg-rs">${SLOT[o.slot].name}</div><div class="pg-rs" style="color:#fff6">なし</div>`; return b; }
       b.className = 'pg-rp r' + p.rarity;
       b.innerHTML = `${p.lock ? `<span class="pg-rl">${glyph('lock')}</span>` : ''}${o.eq ? '<span class="pg-req">装備</span>' : ''}
-        <div class="pg-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>${UI.stars(p.rarity)}
+        <div class="pg-rg pg-rimg" style="--c:${SETS[p.set].c}">${icon(p)}</div>${UI.stars(p.rarity)}
         <div class="pg-rs">${o.full ? SLOT[p.slot].name : ''}${o.full ? '<br>' : ''}${label(p.main.k, p.main.v)}</div>`;
       b.addEventListener('click', () => detail(p));
       if (G.inspect) G.inspect.bindHold(b, () => zoomPiece(p, b));
@@ -213,7 +275,7 @@ G.relics = (function () {
     /* 拡大ビューア: equipped + owned pieces, ←/→ through them */
     function pieceOpts(p) {
       const I = G.inspect, r = data(), eqd = r.equipped[p.slot] === p.id;
-      return { html: `<div class="insp-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>`, title: SLOT[p.slot].name, color: SETS[p.set].c,
+      return { html: `<div class="pg-art">${icon(p)}</div>`, title: SLOT[p.slot].name, color: SETS[p.set].c,
         sub: SETS[p.set].name + ' ' + UI.stars(p.rarity), lv: label(p.main.k, p.main.v), lvMax: p.rarity >= 5,
         body: (eqd ? I.sec('', '<b>✔ 装備中</b>' + (p.lock ? '　🔒 ロック' : '')) : p.lock ? I.sec('', '🔒 ロック中') : '')
           + I.sec('サブステータス', p.subs.map(x => label(x.k, x.v)).join('<br>') || 'なし')
@@ -229,7 +291,7 @@ G.relics = (function () {
       const r = data(), sm = summary();
       const eqIds = new Set(Object.values(r.equipped));
       root.innerHTML = `<div class="pg-ph"><h3>モンドの遺物 <small class="pg-rwho" style="--c:${elc}"><img src="assets/icon_${ch.portrait || ch.id}.webp" alt="">${ch.name}のときの効果</small></h3><span class="pg-purse"><img src="assets/icon_mora.webp" alt="">${U.fmtNum(G.save.data.mora || 0)}</span></div>
-        <div class="pg-rtop"><div class="pg-rbox${r.unopened ? ' has' : ''}"><img src="assets/icon_relic.webp" alt=""><div><b>未開封 ×${r.unopened}</b><small>ボスをたおすと手に入る</small><br>
+        <div class="pg-rtop"><div class="pg-rbox${r.unopened ? ' has' : ''}"><img src="assets/relic_box.webp" alt=""><div><b>未開封 ×${r.unopened}</b><small>ボスをたおすと手に入る</small><br>
         <button class="pg-btn gold pg-open" ${r.unopened ? '' : 'disabled'} style="margin-top:4px">開く！</button></div></div>
         <div class="pg-rsum">${sm.stats.length ? sm.stats.map(s => `<span class="pg-chip">${s.text}</span>`).join('') : '<span class="pg-chip off">まだ装備なし</span>'}
         ${sm.sets.map(s => `<span class="pg-chip set${s.count >= 2 ? '' : ' off'}" style="border-color:${SETS[s.key].c}">${s.name} ${s.count}/4 ${s.count >= 2 ? '・' + s.b2 : ''}${s.count >= 4 ? '・' + s.b4 : ''}</span>`).join('')}</div></div>
@@ -243,7 +305,7 @@ G.relics = (function () {
       for (const p of list) inv.append(pieceTile(p, { eq: eqIds.has(p.id) }));
       drawPresets(root.querySelector('.pg-pre'));
       root.querySelector('.pg-open').addEventListener('click', openAnim);
-      if (G.inspect) { const bi = root.querySelector('.pg-rbox img'); G.inspect.bindTap(bi, () => G.inspect.open({ from: bi, img: 'assets/icon_relic.webp', title: 'モンドの遺物', sub: '未開封 ×' + r.unopened, color: '#9fe8c8',
+      if (G.inspect) { const bi = root.querySelector('.pg-rbox img'); G.inspect.bindTap(bi, () => G.inspect.open({ from: bi, img: 'assets/relic_box.webp', title: 'モンドの遺物', sub: '未開封 ×' + r.unopened, color: '#9fe8c8',
         body: G.inspect.sec('', 'ボスをたおすと 手に入る。「開く！」で 中身がわかるよ') + G.inspect.sec('部位', SLOTS.map(x => x.name).join('・')) }), '大きく見る'); }
       root.querySelector('.pg-salv').addEventListener('click', () => {
         const n = salvageMany(p => p.rarity === 4 && !p.lock && !eqIds.has(p.id));
@@ -268,7 +330,7 @@ G.relics = (function () {
         const c = document.createElement('div');
         c.className = 'pg-pc' + (i === selPre ? ' sel' : '') + (cur ? ' cur' : ''); c.dataset.i = i;
         c.setAttribute('role', 'button'); c.tabIndex = 0; c.title = 'タップでえらぶ・長押し / 右クリックで中身を見る';
-        const glyphs = st.map(x => x.piece ? `<i class="r${x.piece.rarity}" style="--c:${SETS[x.piece.set].c}" title="${SLOT[x.slot].name}">${glyph(SLOT[x.slot].glyph)}</i>`
+        const glyphs = st.map(x => x.piece ? `<i class="r${x.piece.rarity} img" style="--c:${SETS[x.piece.set].c}" title="${SLOT[x.slot].name}">${icon(x.piece)}</i>`
           : `<i class="${x.state}" title="${SLOT[x.slot].name}${x.state === 'miss' ? '（見つからない）' : '（なし）'}">${glyph(SLOT[x.slot].glyph)}</i>`).join('');
         c.innerHTML = (i === renPre ? '' : `<div class="pg-pn"></div>`) + `<div class="pg-pg">${glyphs}</div>`
           + `<div class="pg-pm${miss ? ' bad' : ''}">${miss ? '✕ ' + miss + '個 見つからない' : st.filter(x => x.piece).length + '部位' + (cur ? '・いまの装備' : '')}</div>`;
@@ -328,7 +390,7 @@ G.relics = (function () {
         : x.state === 'miss' ? '<span style="color:#ff9a8a">✕ 見つからない（分解ずみ）</span>' : '<span style="opacity:.6">（なし）</span>')).join('<br>');
       const sets = Object.keys(n).map(k => `${SETS[k].name} ${n[k]}/4` + (n[k] >= 2 ? '：' + setText(k, 'b2') : '') + (n[k] >= 4 ? '・' + setText(k, 'b4') : '')).join('<br>');
       const first = st.find(x => x.piece);
-      return { html: `<div class="insp-rg" style="color:${first ? SETS[first.piece.set].c : '#9fe8c8'}">${glyph(first ? SLOT[first.slot].glyph : 'flower')}</div>`, color: first ? SETS[first.piece.set].c : '#9fe8c8',
+      return { html: first ? `<div class="pg-art">${icon(first.piece)}</div>` : `<div class="insp-rg" style="color:#9fe8c8">${glyph('flower')}</div>`, color: first ? SETS[first.piece.set].c : '#9fe8c8',
         title: p.name, sub: ch.name + 'の 装備プリセット', lv: presetIsCurrent(p) ? '✔ 装備中' : '',
         body: I.sec('部位', lines) + (sets ? I.sec('セット効果（' + ch.name + '）', sets) : '') };
     }
@@ -346,7 +408,7 @@ G.relics = (function () {
       const r = data(), eqd = r.equipped[p.slot] === p.id, cur = byId(r.equipped[p.slot]);
       const d = score(p) - score(cur);
       const ov = document.createElement('div'); ov.className = 'pg-rdet';
-      ov.innerHTML = `<div class="pg-rcard r${p.rarity}"><div class="pg-rtop2"><div class="pg-rg" style="color:${SETS[p.set].c}">${glyph(SLOT[p.slot].glyph)}</div>
+      ov.innerHTML = `<div class="pg-rcard r${p.rarity}"><div class="pg-rtop2"><div class="pg-rg pg-rimg" style="--c:${SETS[p.set].c}">${icon(p)}</div>
         <div><h4>${SLOT[p.slot].name}</h4>${UI.stars(p.rarity)}<div class="pg-rmain">${label(p.main.k, p.main.v)}</div></div></div>
         <ul>${p.subs.map(s => `<li>${label(s.k, s.v)}</li>`).join('')}</ul>
         <div class="pg-rset"><b style="color:${SETS[p.set].c}">${SETS[p.set].name}</b><br>2セット: ${setText(p.set, 'b2')}<br>4セット: ${setText(p.set, 'b4')}</div>
@@ -372,32 +434,41 @@ G.relics = (function () {
       const ov = document.createElement('div'); ov.className = 'pg-ov pg-chest'; ov.style.position = 'fixed'; ov.style.zIndex = 1000;
       ov.style.setProperty('--tc', '#9fe8c8'); ov.style.setProperty('--mc', RC[best]);
       ov.innerHTML = `<div class="pg-sky"></div><div class="pg-tier">モンドの遺物</div><div class="pg-skip">タップでスキップ ▶▶</div>
-        <div class="pg-box"><img src="assets/icon_relic.webp" alt=""></div><div class="pg-reveal" style="display:none"></div>
+        <div class="pg-box"><img src="assets/relic_box.webp" alt=""></div><div class="pg-reveal" style="display:none"></div>
         <div class="pg-close"><button class="pg-btn gold">OK！</button></div>`;
       document.body.append(ov);
       const reveal = ov.querySelector('.pg-reveal'), box = ov.querySelector('.pg-box');
       const timers = [], at = (ms, f) => timers.push(setTimeout(f, ms));
       let finished = false;
+      /* owner 2026-10-03: every revealed card has the SAME size, with 4 substat rows always reserved
+         (a piece never has more than 4). Text shrinks together (one --rvk for all cards) instead of overflowing. */
+      reveal.classList.add('pg-rvwrap');
       const slots = res.map(x => {
-        const p = x.piece, s = document.createElement('div'); s.className = 'pg-slot'; s.style.setProperty('--rc', RC[p.rarity]); s.style.width = 'clamp(92px,16vw,160px)';
-        s.innerHTML = `<div class="pg-pillar"></div><div class="pg-card r${p.rarity}" style="min-height:0;height:auto">
-          <div class="pg-top" style="height:clamp(70px,16vh,110px)">${x.equipped ? '<span class="pg-new">装備！</span>' : ''}
-          <div class="pg-art" style="color:${SETS[p.set].c};font-size:clamp(40px,9vh,70px)">${glyph(SLOT[p.slot].glyph)}</div></div>
-          <div class="pg-body">${UI.stars(p.rarity)}<div class="pg-name" style="font-size:clamp(13px,2.6vh,16px)">${SLOT[p.slot].name}</div>
-          <div class="pg-desc"><b>${label(p.main.k, p.main.v)}</b><br>${p.subs.map(s => label(s.k, s.v)).join('<br>')}</div></div></div>`;
+        const p = x.piece, s = document.createElement('div'); s.className = 'pg-slot pg-rvslot'; s.style.setProperty('--rc', RC[p.rarity]);
+        const subs = [0, 1, 2, 3].map(i => p.subs[i] ? `<li>${label(p.subs[i].k, p.subs[i].v)}</li>` : '<li class="e">―</li>').join('');
+        s.innerHTML = `<div class="pg-pillar"></div><div class="pg-card pg-rvc r${p.rarity}" style="--sc:${SETS[p.set].c}">
+          <div class="pg-top">${x.equipped ? '<span class="pg-new">装備！</span>' : ''}<div class="pg-art">${icon(p)}</div></div>
+          <div class="pg-rvbody">${UI.stars(p.rarity)}<div class="pg-rvname">${SLOT[p.slot].name}</div>
+          <div class="pg-rvset">${SETS[p.set].name}</div><div class="pg-rvmain">${label(p.main.k, p.main.v)}</div>
+          <ul class="pg-rvsubs">${subs}</ul></div></div>`;
         reveal.append(s); return s;
       });
+      const fit = () => fitReveal(reveal);
+      requestAnimationFrame(fit); setTimeout(fit, 150);
+      const onRs = () => { if (!ov.isConnected) return removeEventListener('resize', onRs); requestAnimationFrame(fit); };
+      addEventListener('resize', onRs);
       function finish() {
         if (finished) return; finished = true; timers.forEach(clearTimeout);
         box.remove(); ov.querySelectorAll('.pg-meteor,.pg-bloom,.pg-skip').forEach(n => n.remove());
         reveal.style.display = ''; slots.forEach(s => { if (!s.classList.contains('show')) s.classList.add('instant'); });
+        fit();
         ov.querySelector('.pg-close').classList.add('show');
       }
       ov.addEventListener('click', e => { if (!finished) return finish(); ov.remove(); draw(); });
       G.audio.sfx('chestOpen', { tier: 'relic' });
       at(200, () => box.classList.add('shake'));
       at(750, () => { box.classList.add('gone'); const m = document.createElement('div'); m.className = 'pg-meteor'; ov.append(m); G.audio.sfx('star', { rarity: best }); });
-      at(1500, () => { ov.querySelectorAll('.pg-meteor').forEach(n => n.remove()); const b = document.createElement('div'); b.className = 'pg-bloom'; ov.append(b); reveal.style.display = ''; });
+      at(1500, () => { ov.querySelectorAll('.pg-meteor').forEach(n => n.remove()); const b = document.createElement('div'); b.className = 'pg-bloom'; ov.append(b); reveal.style.display = ''; fit(); });
       res.forEach((x, i) => at(1700 + i * 420, () => { slots[i].classList.add('show'); G.audio.sfx('chestReveal', { rarity: x.piece.rarity }); }));
       at(1700 + res.length * 420 + 200, finish);
     }
@@ -406,5 +477,5 @@ G.relics = (function () {
   }
 
   return { SLOTS, STATS: ST, SETS, data, open, roll, score, applyMods, totals, summary, renderPanel, label,
-    presetsOf, presetSlots, savePreset, applyPreset, renamePreset, deletePreset, MAX_PRESETS: MAX_PRE };
+    presetsOf, presetSlots, savePreset, applyPreset, renamePreset, deletePreset, MAX_PRESETS: MAX_PRE, MAIN_W, SUB_W, iconSrc, fitReveal };
 })();

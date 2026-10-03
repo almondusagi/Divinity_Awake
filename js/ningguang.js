@@ -312,8 +312,8 @@
   }
 
   /* ============================ SKILL: 璇璣屏 ============================ */
-  const SKILL_CD = 12, WALL_LIFE = 10;
-  function skillCdBase(R) { return SKILL_CD * st(R, 'ngSkillCdMul', 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
+  const SKILL_CD = 14, WALL_LIFE = 10;
+  function skillCdBase(R) { return SKILL_CD * st(R, 'ngSkillCdMul', 1) * (R.stats.skillCdMul || 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
   function skillMul(R) { return st(R, 'ngSkillMul', 2.3); }
   let lastBlockSfx = 0;
   function onBlock(R, b, h) {
@@ -330,7 +330,7 @@
   function segDist(b, x, y) { const dx = x - b.x, dy = y - b.y, a = U.clamp(dx * b.ux + dy * b.uy, -b.half, b.half); return Math.hypot(dx - a * b.ux, dy - a * b.uy); }
   function shatter(R, b) {
     if (b.broke) return; b.broke = true; b.dead = true; b.endT = R.time;
-    if (R.stats.ngC2) { // C2: the screen bursts into a geo blast when it breaks
+    if (R.stats.ngC2 || R.stats.ngShatter) { // C2 / 天賦の星図「砕ける屏風」: the screen bursts into a geo blast when it breaks
       G.combat.aoe(R, b.x, b.y, b.half + 2.2, { mul: skillMul(R), element: 'geo', gauge: 1, src: 'ng_skill', knock: 1.6, filter: e => segDist(b, e.x, e.y) <= 2.2 + e.r });
       G.fx.shake(0.35); G.fx.ring && G.fx.ring(b.x, b.y, b.half + 1.2, GOL);
       if (G.fx.boom) G.fx.boom(b.x, b.y, 1.8, { color: GO, kind: 'geo' });

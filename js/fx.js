@@ -678,7 +678,13 @@ G.fx = (function () {
       ctx.drawImage(SPR[elset(el).soft], x - s * 0.9, y - s * 0.9, s * 1.8, s * 1.8);
       ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
       if (im && rc) ctx.drawImage(im, rc[0], rc[1], rc[2], rc[2], x - s / 2, y - s / 2, s, s);
-      else { ctx.fillStyle = (G.EL[el] || G.EL.physical).color; ctx.beginPath(); ctx.arc(x, y, s * 0.3, 0, TAU); ctx.fill(); }
+      else if (el === 'dendro') { // leaf glyph (no sheet cell for 草)
+        const r = s * 0.42; ctx.save(); ctx.translate(x, y); ctx.rotate(-0.6);
+        ctx.fillStyle = '#7fcf2e'; ctx.strokeStyle = '#2f5e10'; ctx.lineWidth = r * 0.16;
+        ctx.beginPath(); ctx.moveTo(0, -r); ctx.quadraticCurveTo(r * 0.85, 0, 0, r); ctx.quadraticCurveTo(-r * 0.85, 0, 0, -r); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = '#d6f5a0'; ctx.lineWidth = r * 0.1; ctx.beginPath(); ctx.moveTo(0, -r * 0.7); ctx.lineTo(0, r * 0.75); ctx.stroke();
+        ctx.restore();
+      } else { ctx.fillStyle = (G.EL[el] || G.EL.physical).color; ctx.beginPath(); ctx.arc(x, y, s * 0.3, 0, TAU); ctx.fill(); }
     };
     if (two) { drawOne(a.el, e.x - s * 0.5); drawOne(e.aura2, e.x + s * 0.5); } else drawOne(a.el, e.x);
   };
@@ -752,7 +758,7 @@ G.fx = (function () {
   const fontCache = {};
   const font = (px, serif) => { const k = px + (serif ? 's' : ''); return fontCache[k] || (fontCache[k] = serif ? `800 ${px}px ${SERIF}` : `900 ${px}px ${ROUND}`); };
   const fmt = v => U.fmtNum(v);
-  const NUMCOL = { pyro: '#ff9a52', hydro: '#5cc0ff', cryo: '#aef6ff', electro: '#d49bff', anemo: '#6ff5cf', geo: '#ffd95a', physical: '#fffaf0' };
+  const NUMCOL = { pyro: '#ff9a52', hydro: '#5cc0ff', cryo: '#aef6ff', electro: '#d49bff', anemo: '#6ff5cf', geo: '#ffd95a', dendro: '#a8e04a', physical: '#fffaf0' };
 
   api.number = (x, y, v, o) => {
     o = o || {};

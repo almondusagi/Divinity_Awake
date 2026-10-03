@@ -111,7 +111,7 @@ G.weapons = (function () {
   function tryBurst(R) {
     const p = R.player, kit = kits[R.charId]; if (!kit) return false;
     if (p.energy < R.char.energyCost || p.burstCd > 0) { G.audio.sfx('denied'); return false; }
-    p.energy = 0; p.burstCd = R.char.burstCd;
+    p.energy = 0; p.burstCd = R.char.burstCd * U.clamp((R.stats && R.stats.burstCdMul) || 1, 0.3, 1); // 天賦の星図「爆発の待ち時間」
     G.bus.emit('burst', R.charId);
     kit.burst(R);
     return true;

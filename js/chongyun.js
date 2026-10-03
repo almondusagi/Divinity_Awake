@@ -344,8 +344,8 @@
   }
 
   /* ============================ SKILL: 霊刃・重華積霜 ============================ */
-  const SKILL_CD = 15, FIELD_R = 4.5, FIELD_T = 10;
-  function skillCdBase(R) { return SKILL_CD * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
+  const SKILL_CD = 16, FIELD_R = 4.5, FIELD_T = 10;
+  function skillCdBase(R) { return SKILL_CD * (R.stats.skillCdMul || 1) * Math.max(0.4, 1 - (R.stats.cdr || 0)); }
   function skillMul(R) { return st(R, 'cySkillMul', 3.0); }
   const FQ = { R: null, until: 0, chill: false };
   function fieldCb(e) {
@@ -405,7 +405,7 @@
       G.audio.sfx('cryo', { x: f0.x, y: f0.y }); G.audio.sfx('rockImpact', { x: f0.x, y: f0.y, vol: 0.7 });
       if (n > 0) spawnParticles(R2, f0.x, f0.y, n >= 3 ? 4 : 3, 2.5);
     } });
-    Ws.cyField = W.field(R, { x: p.x, y: p.y, r: FIELD_R * (S.areaMul || 1), life: FIELD_T * (S.durationMul || 1), tick: 0.25, next: 0.3, ground: true,
+    Ws.cyField = W.field(R, { x: p.x, y: p.y, r: FIELD_R * (S.areaMul || 1) * (S.cyFieldMul || 1), life: FIELD_T * (S.durationMul || 1), tick: 0.25, next: 0.3, ground: true,
       update: fieldUpdate, onTick: fieldTick, onEnd: fieldEnd, draw: fieldDraw, inside: true });
     G.fx.reactionText && G.fx.reactionText(p.x, p.y - 2.6, '霜の領域！', CYL);
   }

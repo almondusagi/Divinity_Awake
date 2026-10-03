@@ -58,13 +58,14 @@ G.game = (function () {
         G.player.update(R, sdt);
         // rebuild spatial grid of enemies
         R.grid.clear();
-        for (let i = 0; i < R.enemies.length; i++) if (!R.enemies[i].dead) R.grid.insert(R.enemies[i]);
+        for (let i = 0; i < R.enemies.length; i++) if (!R.enemies[i].dead && !R.enemies[i].dying) R.grid.insert(R.enemies[i]);
         G.spawner.update(R, sdt);
         G.enemies.update(R, sdt);
         G.weapons.update(R, sdt);
         G.combat.update(R, sdt);
         G.loot.update(R, sdt);
         G.progression.update(R, sdt);
+        G.godfall && G.godfall.update(R, sdt);   // v6: god's last words → fade → chest (ends the run when the chest is opened)
         for (let i = R.props.length - 1; i >= 0; i--) { const p = R.props[i]; if (p.update && p.update(R, sdt, p) === false) R.props.splice(i, 1); }
         // combo decay
         if (R.combo > 0) { R.comboTimer -= sdt; if (R.comboTimer <= 0) R.combo = 0; }
@@ -72,7 +73,8 @@ G.game = (function () {
         if ((R.enemies.length & 31) === 0 || R.enemies.length > G.cfg.maxEnemies) R.enemies = R.enemies.filter(e => !e.dead);
       }
       if (G.debug && G.debug.godMode) R.player.hp = Math.max(R.player.hp, 1);
-      if (R.victoryAt && R.time >= R.victoryAt && !R.over) api.end(true, 'clear'); // (also works while the debug spawn-stop is on)
+      // v6: no auto-victory — the stage clears when the god's chest is opened (js/godfall.js). Once the god has fallen the player can't die.
+      if (R.bossDefeated) { R.player.invuln = Math.max(R.player.invuln || 0, 0.5); if (R.player.hp < 1) R.player.hp = 1; }
       if (R.player.hp <= 0 && !R.over) api.end(false);
     },
 

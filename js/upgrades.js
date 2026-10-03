@@ -55,7 +55,7 @@ G.upgrades = {};
   });
 
   /* ================= Xingqiu (★4) — owner: XINGQIU (kit in js/xingqiu.js reads the S.xq* stats; lv0 defaults live there) ================= */
-  const XQ_MUL = [2.0, 2.5, 3.0, 3.5, 4.0, 4.6];      // sword hit ×ATK (lv0 = 2× Amber's lv0 arrow)
+  const XQ_MUL = [1.7, 2.2, 2.7, 3.2, 3.7, 4.3];      // sword hit ×ATK (lv0 = 2× Amber's lv0 arrow)
   const XQ_BLADES = [1, 2, 3, 4];                     // swords
   const XQ_SPIN = [0.8, 1.15, 1.5, 1.85, 2.2];        // turns per second
   const XQ_DUR = [2.5, 2.9, 3.3, 3.7, 4.2];           // spin time (s) — owner: default ~2.5s
@@ -122,28 +122,33 @@ G.upgrades = {};
 
   /* ================= Timaeus launchers (★4) — new ones come only from the chest choice, max 2 kinds (see G.launcherRules) ================= */
   const L = (k, o) => add('launcher_' + k, Object.assign({ cat: 'launcher', el: k, max: 5, rarity: 4 }, o));
-  const PY = [0.5, 2.1, 3.7, 5.3, 6.9];
+  // v6 (DENDRO): every number on these cards is the one launchers.js really uses (several cards used to be off)
+  const PY = [0.5, 2.1, 3.7, 5.3, 6.9];                                  // pyroMul 0.5 + 1.6/lv, CD 10 s, Lv4+ 2 bombs
   L('pyro', { name: '炎型ランチャー', icon: 'bomb', short: '人形爆弾がドカン！', unlock: R => R.time >= 40,
-    desc: lv => lv === 1 ? `人形爆弾を投げて大爆発\n威力 <b>${pct(PY[0])}</b>・12秒ごと` : `爆弾の威力 ${pct(PY[lv - 2])}→<b>${pct(PY[lv - 1])}</b>` });
-  const HY = [0.1, 0.4, 0.7, 1.0, 1.3], HYR = [3.5, 3.78, 4.06, 4.34, 4.62];
+    desc: lv => lv === 1 ? `人形爆弾を投げて大爆発\n威力 <b>${pct(PY[0])}</b>・10秒ごと` : `爆弾の威力 ${pct(PY[lv - 2])}→<b>${pct(PY[lv - 1])}</b>` + (lv === 4 ? '\n爆弾を <b>2個</b> 投げる！' : '') });
+  const HY = [0.1, 0.4, 0.7, 1.0, 1.3], HYR = [3.2, 3.5, 3.8, 4.1, 4.4]; // mul 0.1 + 0.3/lv, radius 3.2 + 0.3/lv
   L('hydro', { name: '水型ランチャー', icon: 'bottle', short: '水たまりで連続ダメージ', unlock: R => R.time >= 70,
     desc: lv => lv === 1 ? `水入り瓶で水たまりを作る\n1ヒット <b>${pct(HY[0])}</b>・蒸発のチャンス！` : `威力 ${pct(HY[lv - 2])}→<b>${pct(HY[lv - 1])}</b>\n半径 <b>${HYR[lv - 1]}</b>` });
-  const EL = [0.3, 1.1, 1.9, 2.7, 3.5];
+  const EL = [0.3, 1.1, 1.9, 2.7, 3.5];                                   // electroMul 0.3 + 0.8/lv, 1 + (3+lv) targets
   L('electro', { name: '雷型ランチャー', icon: 'lightning', short: '連鎖する雷', unlock: R => R.time >= 105,
-    desc: lv => lv === 1 ? `雷が敵から敵へ連鎖\n威力 <b>${pct(EL[0])}</b>・最大4体` : `威力 ${pct(EL[lv - 2])}→<b>${pct(EL[lv - 1])}</b>\n連鎖 <b>${lv + 3}体</b>` });
-  const AN = [0.5, 0.65, 0.8, 0.95, 1.1], ANR = [5, 5.35, 5.7, 6.05, 6.4];
+    desc: lv => lv === 1 ? `雷が敵から敵へ連鎖\n威力 <b>${pct(EL[0])}</b>・最大5体` : `威力 ${pct(EL[lv - 2])}→<b>${pct(EL[lv - 1])}</b>\n連鎖 <b>${lv + 4}体</b>` });
+  const DLD = G.launcherDendro, DE = [1, 2, 3, 4, 5].map(l => DLD ? DLD.dendroMul(l) : 0.4 + 0.4 * (l - 1)), DD = DLD ? DLD.DENDRO : { R: 3, LIFE: 5, TICK: 0.6, CD: 11 };
+  L('dendro', { name: '草型ランチャー', icon: 'seedpod', short: '草むらで燃焼・開花！', unlock: R => R.time >= 120,
+    desc: lv => lv === 1 ? `いばらの草むらを作る\n${DD.TICK}秒ごとに <b>${pct(DE[0])}</b>・${DD.LIFE}秒間\n半径${DD.R}・${DD.CD}秒ごとに投げる` : `草むらの威力 ${pct(DE[lv - 2])}→<b>${pct(DE[lv - 1])}</b>` + (lv === 4 ? '\nポットを <b>2個</b> 投げる！' : '') });
+  const AN = [0.9, 1.2, 1.5, 1.8, 2.1], ANR = [5, 5.35, 5.7, 6.05, 6.4]; // anemoMul 0.9 + 0.3/lv, radius 5 + 0.35/lv
   L('anemo', { name: '風型ランチャー', icon: 'wind', short: '敵を吸い込むつむじ風', unlock: R => R.time >= 140,
-    desc: lv => lv === 1 ? `敵を吸い込むかぜおこし\n拡散で元素を広げる！` : `威力 ${pct(AN[lv - 2])}→<b>${pct(AN[lv - 1])}</b>\n半径 <b>${ANR[lv - 1]}</b>` });
+    desc: lv => lv === 1 ? `敵を吸い込むかぜおこし\n威力 <b>${pct(AN[0])}</b>・拡散で元素を広げる！` : `威力 ${pct(AN[lv - 2])}→<b>${pct(AN[lv - 1])}</b>\n半径 <b>${ANR[lv - 1]}</b>` });
+  const CYT = [6, 7.5, 9, 10.5, 12];                                      // snow 6 + 1.5 s/lv
   L('cryo', { name: '氷型ランチャー', icon: 'snow', short: '全体に氷を付着', unlock: R => R.time >= 180,
-    desc: lv => lv === 1 ? `雪を降らせて すべての敵に氷付着\n溶解・凍結のチャンス！` : `雪の時間 ${(1 + 0.15 * (lv - 2)).toFixed(2)}秒→<b>${(1 + 0.15 * (lv - 1)).toFixed(2)}秒</b>` });
-  const GE = [3.2, 4.16, 5.12, 6.08, 7.04], GEN = [2, 2, 3, 3, 4];
+    desc: lv => lv === 1 ? `雪を降らせて すべての敵に氷付着\n<b>${CYT[0]}秒間</b>・溶解・凍結のチャンス！` : `雪の時間 ${CYT[lv - 2]}秒→<b>${CYT[lv - 1]}秒</b>` });
+  const GE = [4, 5.2, 6.4, 7.6, 8.8], GEN = [2, 2, 3, 3, 4];             // drop 4 + 1.2/lv
   L('geo', { name: '岩型ランチャー', icon: 'rock', short: '岩の造形物＋シールド', unlock: R => R.time >= 220,
     desc: lv => lv === 1 ? `岩の造形物を落として衝撃波\n威力 <b>${pct(GE[0])}</b>` : `落下威力 ${pct(GE[lv - 2])}→<b>${pct(GE[lv - 1])}</b>\n設置数 <b>${GEN[lv - 1]}</b>` });
   /* launcher rules (owner rule v6 — RULES):
      - a NEW launcher (Lv0→1) is only offered in the chest "えらぶ" choice (progression.available() skips it unless
        ctx.allowNewLauncher); owned launchers level up from level-ups and chests as usual.
      - at most MAX_KINDS different launchers per run: after that no un-owned launcher is offered anywhere (unlock=false). */
-  const LKEYS = ['pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo'].map(k => 'launcher_' + k);
+  const LKEYS = ['pyro', 'hydro', 'cryo', 'electro', 'anemo', 'geo', 'dendro'].map(k => 'launcher_' + k);
   const lOwned = R => LKEYS.filter(k => lvOf(R, k) > 0);
   G.launcherRules = {
     MAX_KINDS: 2, keys: LKEYS,
@@ -199,12 +204,13 @@ G.upgrades = {};
     ['evo_amber_normal', '爆炎の矢', ['amber_normal', 'amber_arrows', 'amber_pierce', 'explosion_radius'], 'ab_evo_amber_normal', '矢が当たるたびに爆発！\n炎の軌跡＋貫通+1'],
     ['evo_amber_skill', '伯爵大行進', ['amber_skill', 'recharge'], 'ab_evo_amber_skill', '伯爵を2体まで出せる\n敵を集めて ぴょん爆発×3→大爆発'],
     ['evo_amber_burst', '炎の大豪雨', ['amber_burst', 'crit_rate'], 'ab_evo_amber_burst', '矢の雨の範囲 ×1.4\n燃える地面＋最後に流星の一斉射'],
-    ['evo_launcher_pyro', 'ボンボン大爆撃', ['launcher_pyro', 'attack'], 'ab_evo_launcher_pyro', '人形爆弾が4つの子爆弾に分裂！'],
+    ['evo_launcher_pyro', 'ボンボン大爆撃', ['launcher_pyro', 'attack'], 'ab_evo_launcher_pyro', '人形爆弾が6つの子爆弾に分裂！'], // code: 6 children (12 on the first one),
     ['evo_launcher_hydro', '大渦潮', ['launcher_hydro', 'harvest'], 'ab_evo_launcher_hydro', '水たまりが動く渦潮に\n敵を吸い込む'],
     ['evo_launcher_cryo', '永久凍土の吹雪', ['launcher_cryo', 'defense'], 'ab_evo_launcher_cryo', '吹雪が氷ダメージを与え\nときどき全体を凍結'],
     ['evo_launcher_electro', '雷雲の審判', ['launcher_electro', 'crit_damage'], 'ab_evo_launcher_electro', '雷雲がついてきて\n0.5秒ごとに落雷'],
     ['evo_launcher_anemo', '風神の大竜巻', ['launcher_anemo', 'speed'], 'ab_evo_launcher_anemo', '巨大な竜巻が戦場を暴れ回り\n敵を巻き上げる'],
     ['evo_launcher_geo', '岩王の城壁', ['launcher_geo', 'hp'], 'ab_evo_launcher_geo', '造形物がシールドを送り\n衝撃波が巨大化'],
+    ['evo_launcher_dendro', '千樹の森', ['launcher_dendro', 'recharge'], 'ab_evo_launcher_dendro', '草むらが 大きく長持ちに（半径×1.35・+3秒）\n2秒ごとに 森が花ひらいて大爆発！\n（草むら1回の2.5倍）'],
     ['evo_xq_normal', '古華奥義・千剣流水', ['xq_blades', 'xq_spin', 'xq_power', 'xq_feather'], 'ab_evo_xq_normal', '剣が止まらず回り続ける！\n剣+2本・大きく速く\n水の剣閃が飛んでいく'],
     ['evo_ng_normal', '天権の宝石雨', ['ng_gems', 'ng_power', 'haste'], 'ab_evo_ng_normal', '石粒+6粒・大きな宝石に！\n当たると岩がはじけ\n空から宝石の雨が降る'],
     ['evo_cy_normal', '霊刃奥義・霜天断雲', ['cy_power', 'cy_arc', 'cy_combo', 'attack'], 'ab_evo_cy_normal', '薙ぎ払いが いつでも氷元素に！\n氷の剣気が飛び、とどめの一撃で\nまわりに氷柱が突き出て凍らせる'],

@@ -1,7 +1,7 @@
 /* levelup.js — PROGRESSION UIs (owner: PROGRESSION):
      G.ui.levelUp(R, offer, onPick)            gorgeous level-up card picker (keys 1-4 / arrows / Enter, reroll)
      G.ui.chest(R, tier, keys, mora, done, got) Genshin-wish-style chest reveal (tap to skip)
-     G.progressionUI.renderMeta(container)      天賦の星図 star-map skill tree over G.data.meta (G.data.metaTree layout)
+     G.progressionUI.renderMeta(container, charId) 天賦の星図 — that character's OWN star map (G.data.metaTree layout, levels G.save.data.metaC[charId])
      G.progressionUI.renderConstellation(container, charId)  命ノ星座 C1–C6 of that character (renderMeta takes charId too)
      G.progressionUI.glyph(name) / art(key) / ensureCss()  shared helpers (also used by relics.js)
    All CSS is scoped under .pg-* and injected as <style id="progression-css">. */
@@ -57,7 +57,7 @@ G.progressionUI = (function () {
     magnet: '#7fe3ff', shield: '#ffd24a', shieldR: '#ffe38a', shieldD: '#ffb347', mora: '#ffd24a', chest: '#ffb347', reroll: '#9fe8c8', revive: '#ff8a5c', boom: '#ff7a3d' };
   function elBadge(el) {
     if (EL_CELL[el]) { const c = EL_CELL[el]; return `<i class="pg-elb" style="background-position:${c[0] * 100}% ${c[1] * 100}%"></i>`; }
-    if (el === 'anemo' || el === 'geo') return `<i class="pg-elb pg-elb-g" style="color:${G.EL[el].color}">${glyph(el === 'anemo' ? 'speed' : 'def')}</i>`;
+    if (el === 'anemo' || el === 'geo' || el === 'dendro') return `<i class="pg-elb pg-elb-g" style="color:${G.EL[el].color}">${glyph(el === 'anemo' ? 'speed' : el === 'dendro' ? 'plume' : 'def')}</i>`;
     return '';
   }
   function art(key, big) {
@@ -501,6 +501,7 @@ G.progressionUI = (function () {
 .st-node.locked{opacity:.5}
 .st-lv{font-size:9.5px;font-weight:900;fill:#cbd6e8;paint-order:stroke;stroke:#0a1124;stroke-width:3px;pointer-events:none}
 .st-node.max .st-lv{fill:#ffe07a}
+.st-brn{font-size:9px;font-weight:900;letter-spacing:.06em;opacity:.9;paint-order:stroke;stroke:#0a1124;stroke-width:3px;pointer-events:none}
 .st-node.sel .st-core{stroke:#fff;stroke-width:2.6;stroke-dasharray:none}
 .st-node.sel,.st-node:focus-visible{filter:drop-shadow(0 0 6px #fffa)}
 .st-kring{fill:#0b143088;stroke:var(--c);stroke-width:1.4;opacity:.75;stroke-dasharray:4 3;transform-box:fill-box;transform-origin:center;animation:pgSpin 10s linear infinite}
@@ -1024,10 +1025,11 @@ G.progressionUI = (function () {
     if (d.pct) return '+' + Math.round(d.per * lv * 100) + '%';
     return '+' + Math.round(d.per * lv * 10) / 10;
   }
-  /* 天賦の星図: star-map skill tree over the same G.save.data.meta levels (old saves keep every level). */
+  /* 天賦の星図 (owner: TALENT): one independent star map per character — levels in G.save.data.metaC[charId]
+     (G.progression.metaLevels). Same layout for everyone (G.data.metaTree), node texts per kit (G.progression.metaDef). */
   function metaFx(d, lv) {
     if (lv <= 0 && (d.max === 1)) return 'なし';
-    if (d.pct) return '+' + Math.round(d.per * lv * 100) + '%';
+    if (d.pct) return (d.neg ? '-' : '+') + Math.round(d.per * lv * 100) + '%';
     return '+' + Math.round(d.per * lv * 10) / 10;
   }
   function metaLine(key, d, lv) {
@@ -1043,30 +1045,35 @@ G.progressionUI = (function () {
   }
   function renderMeta(container, charId) {
     ensureCss();
-    const S = G.save.data; if (!S.meta || typeof S.meta !== 'object') S.meta = {};
-    const cid = panelChar(charId), CH = G.data.characters[cid];
+    const S = G.save.data;
+    const cid = panelChar(charId), CH = G.data.characters[cid], ML = G.progression.metaLevels(cid, true); // this character's own levels
     const TR = G.progression.metaTree(cid), NODES = TR.nodes, DEF = k => G.progression.metaDef(k, cid);
-    const keys = Object.keys(NODES).filter(k => G.data.meta[k]);
+    const keys = (G.data.metaOrder || Object.keys(NODES)).filter(k => NODES[k] && G.data.meta[k]);
+    const elCol = ((G.EL && G.EL[CH.element]) || {}).color || '#ffd24a';
     container.innerHTML = '';
     const root = document.createElement('div'); root.className = 'pg-panel pg-metap';
-    root.innerHTML = `<div class="pg-ph"><h3>天賦の星図 <small class="pg-who" style="--c:${TR.branches.char ? TR.branches.char.c : '#ffd24a'}"><img src="assets/icon_${CH.portrait || cid}.webp" alt="">${CH.name}</small></h3><span class="st-prog"></span><span class="pg-purse"></span></div>
+    root.innerHTML = `<div class="pg-ph"><h3>天賦の星図 <small class="pg-who" style="--c:${elCol}"><img src="assets/icon_${CH.portrait || cid}.webp" alt="">${CH.name}</small></h3><span class="st-prog"></span><span class="pg-purse"></span></div>
       <div class="st-wrap"><div class="st-map"><svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet"></svg></div><div class="st-info"></div></div>`;
     container.append(root);
     const svg = root.querySelector('svg'), info = root.querySelector('.st-info'), map = root.querySelector('.st-map');
     const pEl = root.querySelector('.pg-purse'), prog = root.querySelector('.st-prog');
-    const lvOf = k => (k === 'root' ? 1 : (S.meta[k] | 0));
+    const lvOf = k => (k === 'root' ? 1 : (ML[k] | 0));
     const open = k => { const n = NODES[k]; return !n || n.parent === 'root' || lvOf(n.parent) > 0 || lvOf(k) > 0; };
-    const costOf = k => G.data.metaCost(k, lvOf(k));
+    const costOf = k => G.data.metaCost(k, lvOf(k), cid);
     const state = k => { const d = DEF(k), l = lvOf(k); if (l >= d.max) return 'max'; if (!open(k)) return 'locked'; return (S.mora || 0) >= costOf(k) ? 'can' : 'open'; };
     let sel = keys.find(k => state(k) === 'can') || keys.find(k => state(k) === 'open') || keys[0];
     // static backdrop (stars + faint branch nebulae) built once
     let bg = `<defs><filter id="stGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       <radialGradient id="stHalo"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset=".3" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient></defs>`;
-    const neb = { atk: [90, 80, 110], def: [90, 220, 110], wind: [310, 80, 110], gold: [310, 220, 110], char: [200, 62, 78] };
-    for (const b in neb) if (TR.branches[b]) bg = bg.replace('</defs>', `<radialGradient id="stNeb_${b}"><stop offset="0" stop-color="${TR.branches[b].c}" stop-opacity="${b === 'char' ? '.26' : '.16'}"/><stop offset="1" stop-color="${TR.branches[b].c}" stop-opacity="0"/></radialGradient></defs>`)
-      + `<circle cx="${neb[b][0]}" cy="${neb[b][1]}" r="${neb[b][2]}" fill="url(#stNeb_${b})"/>`;
+    // one faint nebula per branch (row × side) + the branch name above its first two stars
+    for (const b in TR.branches) {
+      const B = TR.branches[b], cx = 200 + B.side * 100, ly = B.row - 25, lx = 200 + B.side * (B.row > 150 ? 105 : 63);
+      bg = bg.replace('</defs>', `<radialGradient id="stNeb_${b}"><stop offset="0" stop-color="${B.c}" stop-opacity=".17"/><stop offset="1" stop-color="${B.c}" stop-opacity="0"/></radialGradient></defs>`)
+        + `<ellipse cx="${cx}" cy="${B.row}" rx="104" ry="52" fill="url(#stNeb_${b})"/>`
+        + `<text class="st-brn" x="${lx}" y="${ly}" text-anchor="middle" style="fill:${B.c}">${B.name}</text>`;
+    }
     for (let i = 0; i < 70; i++) { const x = (i * 97 + 13) % 400, y = (i * 53 + i * i * 7) % 300; bg += `<circle class="st-tw" style="--td:${(i % 7) * 0.4}s" cx="${x}" cy="${y}" r="${(i % 3) * 0.4 + 0.4}" fill="#fff" opacity="${0.15 + (i % 4) * 0.1}"/>`; }
-    const R = 15, C = 2 * Math.PI * (R + 3.5);
+    const R = 13, C = 2 * Math.PI * (R + 3.5);
     function draw() {
       let h = bg, links = '', nodes = '';
       let total = 0, have = 0, canN = 0, minNeed = Infinity;
@@ -1079,7 +1086,7 @@ G.progressionUI = (function () {
         const lit = l > 0, reach = !lit && open(k);
         links += `<line class="st-link${lit ? ' on' : reach ? ' reach' : ''}" style="--c:${col}" data-link="${k}" x1="${par.x}" y1="${par.y}" x2="${n.x}" y2="${n.y}"/>`;
         if (lit) links += `<line class="st-flow" style="--c:${col}" x1="${par.x}" y1="${par.y}" x2="${n.x}" y2="${n.y}"/>`;
-        const ks = !!d.keystone, r = ks ? R + 4 : R, frac = Math.min(1, l / d.max);
+        const ks = !!d.keystone, r = ks ? R + 3 : R, frac = Math.min(1, l / d.max);
         const shape = ks ? `<polygon class="st-kring" points="0,${-r - 7} ${r + 7},0 0,${r + 7} ${-r - 7},0"/>` : '';
         nodes += `<g class="st-node ${st}${ks ? ' ks' : ''}${k === sel ? ' sel' : ''}${lit ? ' lit' : ''}" data-node="${k}" tabindex="0" role="button" aria-label="${d.name}" style="--c:${col}" transform="translate(${n.x} ${n.y})">
           <circle class="st-halo" r="${r + 16}" fill="url(#stHalo)"/>${shape}
@@ -1088,7 +1095,7 @@ G.progressionUI = (function () {
           <circle class="st-arc" r="${r + 3.5}" stroke-dasharray="${(C * frac * (r + 3.5) / (R + 3.5)).toFixed(1)} 999" transform="rotate(-90)"/>
           <circle class="st-core" r="${r}"/>
           <g class="st-gl" transform="translate(${-r * 0.62} ${-r * 0.62}) scale(${(r * 1.24 / 24).toFixed(3)})">${P[d.glyph] || P.star}</g>
-          <text class="st-lv" y="${r + 14}" text-anchor="middle">${l >= d.max ? 'MAX' : l + '/' + d.max}</text></g>`;
+          <text class="st-lv" y="${r + 13}" text-anchor="middle">${l >= d.max ? 'MAX' : l + '/' + d.max}</text></g>`;
       }
       h += links + `<g class="st-root" transform="translate(${TR.root.x} ${TR.root.y})"><circle class="st-halo" r="34" fill="url(#stHalo)" style="color:#9fe8ff"/><circle r="15" class="st-rcore"/>
         <g transform="translate(-9.5 -9.5) scale(.8)" fill="#e9fbff">${P.speed}</g><text y="29" text-anchor="middle" class="st-lv">旅立ち</text></g>` + nodes;
@@ -1115,7 +1122,7 @@ G.progressionUI = (function () {
       const plain = d.max === 1 || k === 'reroll' || d.keystone;
       const fx = l < d.max ? `<div class="st-fx">${metaLine(k, d, l)} <i>→</i> ${metaLine(k, d, l + 1)}</div>` : `<div class="st-fx">${metaLine(k, d, l)}</div>`;
       info.style.setProperty('--c', col);
-      info.innerHTML = `<div class="st-br">${TR.branches[n.br].name}${n.br === 'char' ? ` ・ <b>${CH.name}専用</b>` : ''}${d.keystone ? ' ・ <b>要の星</b>' : ''}</div>
+      info.innerHTML = `<div class="st-br">${TR.branches[n.br].name} ・ ${CH.name}${d.keystone ? ' ・ <b>要の星</b>' : ''}</div>
         <div class="st-name"><i class="pg-orb" style="--c:${col}">${glyph(d.glyph)}</i><span>${d.name}</span>${up}</div>
         ${plain ? `<div class="st-desc">${d.desc}</div>` : ''}${d.max === 1 ? '' : fx}<div class="st-act">${act}</div>`;
       const b = info.querySelector('.st-buy'); if (b) b.addEventListener('click', () => buy(k));
@@ -1132,7 +1139,7 @@ G.progressionUI = (function () {
       body += st === 'max' ? I.sec('', 'MAX！ これ以上は強くならないよ', 'mx') : st === 'locked' ? I.sec('', '先に「' + parName + '」を Lv1 にしよう')
         : I.sec('つぎの強化', mora + ' ' + U.fmtNum(cost) + ' モラ' + (st === 'can' ? '　<b>★ いま強化できる！</b>' : '（あと ' + U.fmtNum(cost - (S.mora || 0)) + '）'));
       return { html: `<i class="pg-orb" style="--c:${col}">${glyph(d.glyph)}</i>`, title: d.name, color: col, body,
-        sub: TR.branches[n.br].name + (n.br === 'char' ? ' ・ ' + CH.name + '専用' : '') + (d.keystone ? ' ・ 要の星' : ''),
+        sub: TR.branches[n.br].name + ' ・ ' + CH.name + (d.keystone ? ' ・ 要の星' : ''),
         lv: l >= d.max ? 'MAX' : 'Lv.' + l + ' / ' + d.max, lvMax: l >= d.max, from: svg.querySelector(`.st-node[data-node="${k}"] .st-core`) };
     }
     function zoomMeta(k) { G.inspect.open({ index: Math.max(0, keys.indexOf(k)), list: keys.map(x => () => metaOpts(x)) }); }
@@ -1145,7 +1152,7 @@ G.progressionUI = (function () {
         return;
       }
       const cost = costOf(key);
-      S.mora -= cost; S.meta[key] = lv + 1; G.save.write();
+      S.mora -= cost; ML[key] = lv + 1; G.save.write();
       const maxed = lv + 1 >= d.max;
       G.audio.sfx('mora'); G.audio.sfx('star', { rarity: d.keystone || maxed ? 5 : 4 }); if (maxed) G.audio.sfx('levelup');
       const wasLit = lv > 0;

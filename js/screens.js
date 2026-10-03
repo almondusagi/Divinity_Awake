@@ -472,6 +472,8 @@ G.screens = (function () {
     bgm('home');
     const S = G.save.data, C = G.data.characters;
     loadSel(); fixSel();
+    // 天賦の星図 v6 (TALENT): the old shared map was refunded once — one short notice
+    try { if (G.progression && G.progression.migrateMeta) G.progression.migrateMeta(); if (S.metaRefund > 0) { const n = S.metaRefund; delete S.metaRefund; G.save.write(); setTimeout(() => toast('天賦の星図が キャラごとになったよ！ ' + U.fmtNum(n) + ' モラを返したよ'), 600); } } catch (e) { console.error(e); }
     const ch = C[selChar] || C.amber;
     const elInfo = G.EL[ch.element] || G.EL.pyro;
 
@@ -727,11 +729,12 @@ G.screens = (function () {
   /* ---- 強化ガイド: what Mora can buy right now. Reads only data (G.data.meta / metaTree / metaCost,
      G.progression.constellations) so balance changes show up automatically. ---- */
   function metaState() {
-    const S = G.save.data, P = G.progression, TR = P && P.metaTree ? P.metaTree(selChar) : G.data.metaTree, cost = G.data.metaCost, mora = S.mora || 0;
-    const M = {}; for (const k in TR.nodes) M[k] = P && P.metaDef ? P.metaDef(k, selChar) : G.data.meta[k]; // selected character's stars + names
+    const S = G.save.data, P = G.progression, TR = P && P.metaTree ? P.metaTree(selChar) : G.data.metaTree, cost = (k, l) => G.data.metaCost(k, l, selChar), mora = S.mora || 0;
+    const M = {}; for (const k in TR.nodes) M[k] = P && P.metaDef ? P.metaDef(k, selChar) : G.data.meta[k]; // selected character's own map (v6: per character)
+    const ML = P && P.metaLevels ? P.metaLevels(selChar) : {};
     const out = { can: [], next: null };
     if (!TR || !TR.nodes || typeof cost !== 'function') return out;
-    const lv = k => (k === 'root' ? 1 : ((S.meta && S.meta[k]) | 0));
+    const lv = k => (k === 'root' ? 1 : (ML[k] | 0));
     for (const k in TR.nodes) {
       const d = M[k], n = TR.nodes[k]; if (!d) continue;
       const l = lv(k); if (l >= (d.max || 1)) continue;
@@ -751,7 +754,7 @@ G.screens = (function () {
   function metaFxText(d, lv) {
     if (d.max === 1 || d.keystone || !d.per) return d.desc || '';
     const v = d.pct ? Math.round(d.per * lv * 100) + '%' : Math.round(d.per * lv * 10) / 10;
-    return d.name + ' +' + v;
+    return d.name + (d.neg ? ' -' : ' +') + v;
   }
   function guideCard() {
     const ms = metaState(), cs = consState(), mora = G.save.data.mora || 0;

@@ -53,7 +53,9 @@ G.loot = (function () {
     // wind magnet: rare random drop + a "vacuum" drop whenever lots of particles lie around (every ≥75 s)
     if (!big && U.chance(0.0025)) add(R, { type: 'magnet', x: e.x, y: e.y });
     else if (!big && R.time - (R.lastMagnetT || 0) > 75 && R.pickups.length > 90) { R.lastMagnetT = R.time; add(R, { type: 'magnet', x: e.x, y: e.y, vz: 7 }); }
-    if (e.reward) add(R, { type: 'chest', x: e.x, y: e.y, tier: e.reward, vz: 8 });
+    if (def.final && e.godfallDone && G.godfall) G.godfall.dropChest(R, e); // v6: the god's chest — opening it clears the stage
+    else if (R.bossDefeated) { /* v6: after the god falls nothing else drops a chest */ }
+    else if (e.reward) add(R, { type: 'chest', x: e.x, y: e.y, tier: e.reward, vz: 8 });
     else if (!big && evoWaiting(R) && R.time - Math.max(R.evoReadyT, R.lastChestT) > 20 && !R.pickups.some(o => o.type === 'chest')) {
       // an evolution is ready: make sure a chest shows up soon (it will glow gold)
       R.lastChestT = R.time; add(R, { type: 'chest', x: e.x, y: e.y, tier: 'exquisite', random: true, vz: 9 });
@@ -124,6 +126,7 @@ G.loot = (function () {
     const range = S.pickup;
     for (let i = R.pickups.length - 1; i >= 0; i--) {
       const o = R.pickups[i]; o.t += dt;
+      if (o.type === 'godchest') { G.godfall.updateChest(R, o, dt); continue; } // never magnet-pulled; opens on touch
       // pop-out arc
       if (o.vz || o.z > 0) {
         o.z += o.vz * dt; o.vz -= 18 * dt;
@@ -146,7 +149,7 @@ G.loot = (function () {
   function draw(ctx) {
     const R = G.run, t = R.realTime;
     for (const o of R.pickups) {
-      if (!G.render.onScreen(o.x, o.y, 2)) continue;
+      if (!G.render.onScreen(o.x, o.y, o.type === 'godchest' ? 14 : 2)) continue;
       const y = o.y - o.z - 0.3 - Math.sin(t * 4 + o.x) * 0.06;
       if (o.type === 'xp' && o.star) { drawStarOrb(ctx, o, y, t); continue; }
       if (o.type === 'xp') {
@@ -183,7 +186,8 @@ G.loot = (function () {
         ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 + Math.sin(t * 4) * 0.2;
         ctx.drawImage(G.assets.glow('#9fe8c8', 64), o.x - 1.5, y - 1.5, 3, 3); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
         G.render.icon(ctx, 'relic', o.x, y, 1.3);
-      } else if (o.type === 'chest') {
+      } else if (o.type === 'godchest') G.godfall.drawChest(ctx, o, o.y - o.z - 0.3, t);
+      else if (o.type === 'chest') {
         if (evoWaiting(R)) { drawEvoChest(ctx, o, y, t); continue; }
         const col = o.tier === 'luxurious' ? '#ffd24a' : o.tier === 'precious' ? '#ffb347' : o.tier === 'exquisite' ? '#c28bff' : '#6fb7ff';
         ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5 + Math.sin(t * 5) * 0.2;

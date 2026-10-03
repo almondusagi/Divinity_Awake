@@ -5,13 +5,14 @@
 G.spawner = (function () {
   const U = G.u;
   const HARD_CAP = 232;
-  function initRun(R) { R.spawn = { acc: 0, evIdx: 0, finalPhase: false, warned: {}, enraged: false, alive: 0, powerK: powerK() }; }
+  function initRun(R) { R.spawn = { acc: 0, evIdx: 0, finalPhase: false, warned: {}, enraged: false, alive: 0, powerK: powerK(R) }; }
   /** 0..1 — how much of the home-upgrade power curve this save owns (offense-weighted). A strong save gets a bigger,
       faster horde (rate ×(1+2.4k), cap ×(1+1.3k)) so maxed runs fill the screen instead of running out of targets. */
-  const POWER_W = { power: 3, haste: 3, multishot: 3, range: 1, crit_rate: 1, crit_damage: 1, ks_fire: 1, wisdom: 1, vitality: 1 };
-  function powerK() {
-    const M = (G.save && G.save.data.meta) || {}; let have = 0, tot = 0;
-    for (const k in POWER_W) { const d = G.data.meta[k]; if (!d) continue; tot += POWER_W[k]; have += POWER_W[k] * Math.min(1, (M[k] || 0) / d.max); }
+  const POWER_W = { power: 3, n_spd: 3, n_dmg: 3, range: 1, crit_rate: 1, crit_damage: 1, ks_fire: 1, wisdom: 1, vitality: 1 };
+  function powerK(R) {
+    // 天賦の星図 is per character (v6): read the running character's own map
+    const P = G.progression, id = R && R.charId; let have = 0, tot = 0;
+    for (const k in POWER_W) { const d = P && P.metaDef ? P.metaDef(k, id) : G.data.meta[k]; if (!d) continue; tot += POWER_W[k]; have += POWER_W[k] * Math.min(1, (P && P.metaLv ? P.metaLv(k, id) : 0) / d.max); }
     const c = G.progression && G.progression.constellationLevel ? G.progression.constellationLevel() / 6 : 0;
     return U.clamp((have + c) / (tot + 1), 0, 1);
   }
@@ -118,6 +119,7 @@ G.spawner = (function () {
   });
 
   function update(R, dt) {
+    if (R.bossDefeated) return; // v6: the god has fallen — nothing else comes
     const st = G.data.stages[R.stageId], t = R.time, S = R.spawn;
     // scripted events
     while (S.evIdx < st.events.length && t >= st.events[S.evIdx].time) {
@@ -166,7 +168,6 @@ G.spawner = (function () {
         }
       }
     } else S.acc = 0;
-    if (R.victoryAt && t >= R.victoryAt && !R.over) G.game.end(true, 'clear');
     // enrage timer for the final boss (13:00)
     if (S.finalPhase && R.boss && R.boss.def.final && t > 780 && !S.enraged) { S.enraged = true; R.boss.enraged = true; G.bus.emit('bossEnrage', R.boss); }
   }
@@ -175,7 +176,7 @@ G.spawner = (function () {
     const R = G.run; if (!R) return;
     // grand finale: a golden shockwave rolls out from the fallen boss and pops the horde in order (loot shower)
     G.enemyFx.finale(R, e.x, e.y, e.def.final ? 9 : 11, e.def.final ? 30 : 16);
-    if (e.def.final) { R.bossDefeated = true; R.victoryAt = R.time + 3.2; }
+    if (e.def.final) R.bossDefeated = true; // v6: the stage clears when the god's chest is opened (js/godfall.js)
   });
   return { initRun, update, ringPoint, powerK };
 })();

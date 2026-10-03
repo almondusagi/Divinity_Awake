@@ -9,21 +9,21 @@ G.data.characters = {
   amber: {
     id: 'amber', name: 'アンバー', title: '偵察騎士', element: 'pyro', weapon: '弓', atlas: 'amber', portrait: 'amber',
     implemented: true,
-    hp: 1000, atk: 100, def: 0, speed: 4.1, pickup: 1.2,
+    hp: 100, atk: 100, def: 100, speed: 4.0, pickup: 1.5,
     // un-upgraded normal attack is deliberately clumsy (slow bow, short auto-aim); home upgrades fix it (balance v5)
-    atkInterval: 2.4, range: 8.5, chargedPeriod: 6.0,   // owner 2026-09-28: ×2 (was 1.2)
-    energyCost: 40, skillCd: 18, burstCd: 12,
+    atkInterval: 2.4, range: 8.5, chargedPeriod: 6.0,   // owner 2026-10-03: unified base stats
+    energyCost: 50, skillCd: 20, burstCd: 60,
     skillName: 'ウサギ伯爵', burstName: '矢の雨', normalName: '炎の矢',
-    passive: '爆発範囲 常時×2（固有天賦）',
+    passive: '炎の矢が当たった敵に 炎元素を付着',
     blurb: 'モンド唯一の偵察騎士。炎の矢と爆発で群れを焼き払う。',
   },
   xingqiu: {
     id: 'xingqiu', name: '行秋', title: '古華派の剣士', element: 'hydro', weapon: '片手剣', atlas: 'xingqiu', portrait: 'xingqiu',
     implemented: true, // 4-direction sheet: assets/actor_xingqiu.webp (owner pack)
-    hp: 1150, atk: 100, def: 10, speed: 4.2, pickup: 1.2,
+    hp: 100, atk: 100, def: 100, speed: 4.0, pickup: 1.5,
     // melee: swords orbit around him. atkInterval = rest time between spins (long at first; 雷鳥の羽 shortens it)
     atkInterval: 2.4, range: 8.5,
-    energyCost: 50, skillCd: 14, burstCd: 15,
+    energyCost: 50, skillCd: 16, burstCd: 60,
     skillName: '古華剣・画雨籠山', burstName: '古華剣・裁雨留虹', normalName: '古華剣法・流水の舞',
     skillIcon: 'xq_skill', burstIcon: 'xq_burst', normalIcon: 'xq_blades',
     passive: '雨すだれの剣が消えると HP 6% 回復（虹剣勢）',
@@ -39,10 +39,10 @@ G.data.characters = {
     id: 'ningguang', name: '凝光', title: '天権星', element: 'geo', weapon: '法器', portrait: 'ningguang', atlas: 'ningguang',
     implemented: true, // kit: js/ningguang.js (owner: NINGGUANG)
     unlock: { stage: 'mondstadt', mora: 50000 }, // UI: G.unlocks (silhouette until the stage is cleared, then buy)
-    hp: 950, atk: 100, def: 5, speed: 4.0, pickup: 1.2,
+    hp: 100, atk: 100, def: 100, speed: 4.0, pickup: 1.5,
     // normal: a volley of homing gold pebbles (7 at first, 25% ATK each = 1/4 of Amber's lv0 arrow) every atkInterval s
-    atkInterval: 1.1, range: 9,
-    energyCost: 40, skillCd: 12, burstCd: 12,
+    atkInterval: 2.4, range: 8.5,
+    energyCost: 50, skillCd: 14, burstCd: 60,
     skillName: '璇璣屏', burstName: '天権崩玉', normalName: '千金の石粒',
     skillIcon: 'ng_skill', burstIcon: 'ng_burst', normalIcon: 'ng_gems',
     passive: '屏風を通った石粒は 威力+30%',
@@ -58,10 +58,10 @@ G.data.characters = {
     id: 'chongyun', name: '重雲', title: '方士の少年', element: 'cryo', weapon: '両手剣', portrait: 'chongyun', atlas: 'chongyun',
     implemented: true, // kit: js/chongyun.js (owner: CHONGYUN)
     unlock: { stage: 'mondstadt', mora: 50000 }, // UI: G.unlocks (silhouette until the stage is cleared, then buy)
-    hp: 1150, atk: 100, def: 15, speed: 3.95, pickup: 1.2,
+    hp: 100, atk: 100, def: 100, speed: 4.0, pickup: 1.5,
     // melee: heavy greatsword sweeps. atkInterval = rest between swing chains (slow at first; 攻撃速度・霜の領域 shorten it)
-    atkInterval: 1.7, range: 8.5,
-    energyCost: 40, skillCd: 15, burstCd: 12,
+    atkInterval: 2.4, range: 8.5,
+    energyCost: 50, skillCd: 16, burstCd: 60,
     skillName: '霊刃・重華積霜', burstName: '霊刃・雲開星落', normalName: '滅邪四式',
     skillIcon: 'cy_skill', burstIcon: 'cy_burst', normalIcon: 'cy_sword',
     passive: '霜の領域が消えると 霊刃が落ちてくる（追氷剣）',
@@ -81,49 +81,53 @@ G.data.roster = ['amber', 'xingqiu', 'ningguang', 'chongyun'];
    speed (units/s), dmg (contact / attack damage at 0:00; attacks use multiples of it), xp (energy particle value)
    ai: behaviour in G.enemyAI. burst (hopper): elemental discharge {r, color, hue, cd:[min,max]} */
 G.data.enemies = {
-  mote:    { name: '棍棒ヒルチャール', atlas: 'hilichurl', h: 2.0, r: 0.42, hp: 160,   speed: 1.55, dmg: 40, xp: 2, ai: 'melee', element: null },
-  swift:   { name: '風スライム',       atlas: 'slime', filter: 'hue-rotate(-70deg) saturate(1.2)', h: 1.3, r: 0.35, hp: 95, speed: 2.9, dmg: 30, xp: 1, ai: 'hopper', element: 'anemo', hopT: 0.38, hopH: 0.7 },
-  swarm:   { name: '水スライム',       atlas: 'slime', h: 1.05, r: 0.3, hp: 85, speed: 2.2, dmg: 25, xp: 1, ai: 'hopper', element: 'hydro' },
-  volt:    { name: '雷スライム',       atlas: 'slime', filter: 'hue-rotate(60deg) saturate(1.6) brightness(1.05)', h: 1.3, r: 0.36, hp: 190, speed: 2.0, dmg: 35, xp: 2, ai: 'hopper', element: 'electro',
+  mote:    { name: '棍棒ヒルチャール', atlas: 'hilichurl', h: 2.0, r: 0.42, hp: 150,   speed: 1.5, dmg: 40, xp: 2, ai: 'melee', element: null },
+  swift:   { name: '風スライム',       atlas: 'slime', filter: 'hue-rotate(-70deg) saturate(1.2)', h: 1.3, r: 0.35, hp: 85, speed: 2.0, dmg: 30, xp: 1, ai: 'hopper', element: 'anemo', hopT: 0.38, hopH: 0.7 },
+  swarm:   { name: '水スライム',       atlas: 'slime', h: 1.05, r: 0.3, hp: 85, speed: 2.0, dmg: 30, xp: 1, ai: 'hopper', element: 'hydro' },
+  volt:    { name: '雷スライム',       atlas: 'slime', filter: 'hue-rotate(60deg) saturate(1.6) brightness(1.05)', h: 1.3, r: 0.36, hp: 85, speed: 2.0, dmg: 30, xp: 2, ai: 'hopper', element: 'electro',
              burst: { r: 1.9, color: '#d59bff', hue: '#6a1fb0', cd: [4, 6] } },
-  frost:   { name: '氷スライム',       atlas: 'slime', filter: 'hue-rotate(-25deg) saturate(0.45) brightness(1.45)', h: 1.3, r: 0.36, hp: 220, speed: 1.9, dmg: 38, xp: 2, ai: 'hopper', element: 'cryo',
+  frost:   { name: '氷スライム',       atlas: 'slime', filter: 'hue-rotate(-25deg) saturate(0.45) brightness(1.45)', h: 1.3, r: 0.36, hp: 85, speed: 2.0, dmg: 30, xp: 2, ai: 'hopper', element: 'cryo',
              burst: { r: 2.1, color: '#9ff0ff', hue: '#1f6a8a', cd: [4.5, 6.5] } },
-  shell:   { name: '大型岩スライム',   atlas: 'slime', filter: 'hue-rotate(-160deg) saturate(1.4) brightness(1.05)', h: 2.3, r: 0.7, hp: 720, speed: 1.0, dmg: 70, xp: 5, ai: 'hopper', element: 'geo', hopT: 0.6, hopH: 0.8,
+  shell:   { name: '大型岩スライム',   atlas: 'slime', filter: 'hue-rotate(-160deg) saturate(1.4) brightness(1.05)', h: 2.3, r: 0.7, hp: 255, speed: 1.0, dmg: 60, xp: 5, ai: 'hopper', element: 'geo', hopT: 0.6, hopH: 0.8,
              crush: { r: 2.2, cd: [5, 7.5] } },
-  spitter: { name: '弓ヒルチャール',   atlas: 'archer', h: 2.0, r: 0.42, hp: 260, speed: 1.2, dmg: 45, xp: 3, ai: 'archer', element: null },
-  charger: { name: '突撃ヒルチャール', atlas: 'hilichurl', filter: 'sepia(0.5) hue-rotate(-25deg) saturate(1.8)', h: 2.15, r: 0.46, hp: 440, speed: 1.6, dmg: 75, xp: 4, ai: 'charger', element: null },
-  binder:  { name: 'ヒルチャール・シャーマン', atlas: 'shaman', h: 2.1, r: 0.44, hp: 500, speed: 1.0, dmg: 35, xp: 5, ai: 'shaman', element: 'hydro' },
-  shielder:{ name: '盾ヒルチャール',   atlas: 'brute', filter: 'saturate(0.8) brightness(1.1)', h: 2.4, r: 0.55, hp: 880, speed: 1.1, dmg: 60, xp: 6, ai: 'rockthrower', element: 'geo' },
-  elite:   { name: 'ヒルチャール暴徒', atlas: 'brute', h: 3.3, r: 0.85, hp: 3600, speed: 1.35, dmg: 120, xp: 15, ai: 'brute', element: null, elite: true },
+  spitter: { name: '弓ヒルチャール',   atlas: 'archer', h: 2.0, r: 0.42, hp: 100, speed: 1.0, dmg: 40, xp: 3, ai: 'archer', element: null },
+  charger: { name: '突撃ヒルチャール', atlas: 'hilichurl', filter: 'sepia(0.5) hue-rotate(-25deg) saturate(1.8)', h: 2.15, r: 0.46, hp: 80, speed: 3.0, dmg: 45, xp: 4, ai: 'charger', element: null },
+  binder:  { name: 'ヒルチャール・シャーマン', atlas: 'shaman', h: 2.1, r: 0.44, hp: 200, speed: 1.0, dmg: 30, xp: 5, ai: 'shaman', element: 'hydro' },
+  shielder:{ name: '盾ヒルチャール',   atlas: 'brute', filter: 'saturate(0.8) brightness(1.1)', h: 2.4, r: 0.55, hp: 400, speed: 1.0, dmg: 50, xp: 6, ai: 'rockthrower', element: 'geo' },
+  elite:   { name: 'ヒルチャール暴徒', atlas: 'brute', h: 3.3, r: 0.85, hp: 3000, speed: 1.3, dmg: 100, xp: 15, ai: 'brute', element: null, elite: true },
   ruin:    { name: '遺跡守衛',         atlas: 'ruin', h: 5.2, r: 1.5, hp: 60000, speed: 0.9, dmg: 160, xp: 60, ai: 'ruin', element: null, boss: true, bossTitle: '古代の機械' },
-  venti:   { name: 'ウェンティ',       atlas: 'venti', h: 2.7, r: 0.6, hp: 420000, speed: 1.4, dmg: 150, xp: 100, ai: 'venti', element: 'anemo', boss: true, final: true, bossTitle: '風神', icon: 'venti' },
+  venti:   { name: 'ウェンティ',       atlas: 'venti', h: 2.7, r: 0.6, hp: 420000, speed: 1.4, dmg: 150, xp: 100, ai: 'venti', element: 'anemo', boss: true, final: true, bossTitle: '風神', icon: 'venti',
+             lines: { low: '……ねえ、どうして逆らうの？　こんなに自由にしてあげたのに。', death: 'そっか……それがキミの選択なんだね。……風が、止んじゃった。' } },
 
   /* ---- v5 stages (owner: STAGE). Normal/elite HP & damage are further multiplied by the stage's `mul` (enemies.spawn);
          mid-bosses and gods carry their own numbers. ---- */
   // 璃月 (geo)
-  geoslime:  { name: '岩スライム',     atlas: 'slime', filter: 'hue-rotate(-160deg) saturate(1.3) brightness(1.08)', h: 1.3, r: 0.36, hp: 200, speed: 1.9, dmg: 38, xp: 2, ai: 'hopper', element: 'geo', hopT: 0.5, hopH: 0.6 },
-  geoshaman: { name: '岩のシャーマン', atlas: 'shaman', filter: 'sepia(0.85) saturate(2.2) hue-rotate(-18deg)', h: 2.1, r: 0.44, hp: 520, speed: 1.0, dmg: 38, xp: 5, ai: 'shaman', element: 'geo', orbColor: '#ffd24a' },
-  geobrute:  { name: '岩兜の暴徒',     atlas: 'brute', filter: 'sepia(0.7) saturate(1.8) hue-rotate(-8deg) brightness(1.05)', h: 3.4, r: 0.88, hp: 3900, speed: 1.3, dmg: 125, xp: 16, ai: 'brute', element: 'geo', elite: true },
-  spearman:  { name: '璃月の槍兵',     atlas: 'liyue_spearman', h: 2.15, r: 0.44, hp: 300, speed: 1.5, dmg: 55, xp: 3, ai: 'lancer', element: null },
+  geoslime:  { name: '岩スライム',     atlas: 'slime', filter: 'hue-rotate(-160deg) saturate(1.3) brightness(1.08)', h: 1.3, r: 0.36, hp: 85, speed: 2.0, dmg: 30, xp: 2, ai: 'hopper', element: 'geo', hopT: 0.5, hopH: 0.6 },
+  geoshaman: { name: '岩のシャーマン', atlas: 'shaman', filter: 'sepia(0.85) saturate(2.2) hue-rotate(-18deg)', h: 2.1, r: 0.44, hp: 200, speed: 1.0, dmg: 30, xp: 5, ai: 'shaman', element: 'geo', orbColor: '#ffd24a' },
+  geobrute:  { name: '岩兜の暴徒',     atlas: 'brute', filter: 'sepia(0.7) saturate(1.8) hue-rotate(-8deg) brightness(1.05)', h: 3.4, r: 0.88, hp: 3000, speed: 1.3, dmg: 100, xp: 16, ai: 'brute', element: 'geo', elite: true },
+  spearman:  { name: '璃月の槍兵',     atlas: 'liyue_spearman', h: 2.15, r: 0.44, hp: 200, speed: 1.5, dmg: 50, xp: 3, ai: 'lancer', element: null },
   rock_drake: { name: '岩竜ヴィシャップ', atlas: 'rock_drake', h: 4.4, r: 1.35, hp: 130000, speed: 1.3, dmg: 170, xp: 70, ai: 'drake', element: 'geo', boss: true, bossTitle: '岩の古竜', mid: true },
-  zhongli:   { name: '鍾離',           atlas: 'zhongli', h: 2.8, r: 0.62, hp: 1000000, speed: 1.2, dmg: 180, xp: 120, ai: 'zhongli', element: 'geo', boss: true, final: true, bossTitle: '岩神', icon: 'zhongli' },
+  zhongli:   { name: '鍾離',           atlas: 'zhongli', h: 2.8, r: 0.62, hp: 1000000, speed: 1.2, dmg: 180, xp: 120, ai: 'zhongli', element: 'geo', boss: true, final: true, bossTitle: '岩神', icon: 'zhongli',
+             lines: { low: '契約に背くというのか。……なぜ、定められた秩序に刃を向ける。', death: '……よかろう。それが、お前の選んだ道ならば。――この契約、ここに終わる。' } },
   // 稲妻 (electro)
-  voltbig:   { name: '大型雷スライム', atlas: 'slime', filter: 'hue-rotate(60deg) saturate(1.7) brightness(1.02)', h: 2.3, r: 0.7, hp: 760, speed: 1.0, dmg: 72, xp: 5, ai: 'hopper', element: 'electro', hopT: 0.6, hopH: 0.8,
+  voltbig:   { name: '大型雷スライム', atlas: 'slime', filter: 'hue-rotate(60deg) saturate(1.7) brightness(1.02)', h: 2.3, r: 0.7, hp: 255, speed: 1.0, dmg: 60, xp: 5, ai: 'hopper', element: 'electro', hopT: 0.6, hopH: 0.8,
                crush: { r: 2.2, cd: [5.5, 8] }, burst: { r: 2.6, color: '#d59bff', hue: '#6a1fb0', cd: [5, 7] } },
-  voltarcher:{ name: '雷弓ヒルチャール', atlas: 'archer', filter: 'hue-rotate(240deg) saturate(1.5)', h: 2.0, r: 0.42, hp: 280, speed: 1.25, dmg: 48, xp: 3, ai: 'archer', element: 'electro' },
-  voltbrute: { name: '雷兜の暴徒',     atlas: 'brute', filter: 'hue-rotate(250deg) saturate(1.6) brightness(0.92)', h: 3.4, r: 0.88, hp: 4000, speed: 1.4, dmg: 130, xp: 16, ai: 'brute', element: 'electro', elite: true },
-  ronin:     { name: '稲妻の浪人',     atlas: 'inazuma_ronin', h: 2.15, r: 0.44, hp: 380, speed: 1.7, dmg: 65, xp: 4, ai: 'ronin', element: 'electro' },
+  voltarcher:{ name: '雷弓ヒルチャール', atlas: 'archer', filter: 'hue-rotate(240deg) saturate(1.5)', h: 2.0, r: 0.42, hp: 100, speed: 1.0, dmg: 40, xp: 3, ai: 'archer', element: 'electro' },
+  voltbrute: { name: '雷兜の暴徒',     atlas: 'brute', filter: 'hue-rotate(250deg) saturate(1.6) brightness(0.92)', h: 3.4, r: 0.88, hp: 3000, speed: 1.3, dmg: 100, xp: 16, ai: 'brute', element: 'electro', elite: true },
+  ronin:     { name: '稲妻の浪人',     atlas: 'inazuma_ronin', h: 2.15, r: 0.44, hp: 200, speed: 1.5, dmg: 50, xp: 4, ai: 'ronin', element: 'electro' },
   storm_sentinel: { name: '雷嵐の番機', atlas: 'storm_sentinel', h: 3.6, r: 1.1, hp: 270000, speed: 1.2, dmg: 200, xp: 80, ai: 'sentinel', element: 'electro', boss: true, bossTitle: '雷の古代機械', mid: true },
-  raiden:    { name: '雷電将軍',       atlas: 'raiden', h: 2.8, r: 0.6, hp: 2100000, speed: 1.5, dmg: 220, xp: 140, ai: 'raiden', element: 'electro', boss: true, final: true, bossTitle: '雷神', icon: 'raiden' },
+  raiden:    { name: '雷電将軍',       atlas: 'raiden', h: 2.8, r: 0.6, hp: 2100000, speed: 1.5, dmg: 220, xp: 140, ai: 'raiden', element: 'electro', boss: true, final: true, bossTitle: '雷神', icon: 'raiden',
+             lines: { low: '永遠を拒むのですか。……なぜ、与えられた安寧に背くのです。', death: '……これが、あなたの答え。ならば永遠は――ここで、潰えましょう。' } },
   // スメール (dendro)
-  dendroslime: { name: '草スライム',   atlas: 'slime', filter: 'hue-rotate(-105deg) saturate(1.5) brightness(1.02)', h: 1.3, r: 0.36, hp: 210, speed: 2.0, dmg: 38, xp: 2, ai: 'hopper', element: 'dendro', hopT: 0.42, hopH: 0.65 },
-  dendrobig: { name: '大型草スライム', atlas: 'slime', filter: 'hue-rotate(-105deg) saturate(1.6) brightness(0.95)', h: 2.3, r: 0.7, hp: 780, speed: 1.0, dmg: 72, xp: 5, ai: 'hopper', element: 'dendro', hopT: 0.6, hopH: 0.8,
+  dendroslime: { name: '草スライム',   atlas: 'slime', filter: 'hue-rotate(-105deg) saturate(1.5) brightness(1.02)', h: 1.3, r: 0.36, hp: 85, speed: 2.0, dmg: 30, xp: 2, ai: 'hopper', element: 'dendro', hopT: 0.42, hopH: 0.65 },
+  dendrobig: { name: '大型草スライム', atlas: 'slime', filter: 'hue-rotate(-105deg) saturate(1.6) brightness(0.95)', h: 2.3, r: 0.7, hp: 255, speed: 1.0, dmg: 60, xp: 5, ai: 'hopper', element: 'dendro', hopT: 0.6, hopH: 0.8,
                crush: { r: 2.3, cd: [5, 7.5] } },
-  dendroshaman: { name: '草のシャーマン', atlas: 'shaman', filter: 'hue-rotate(75deg) saturate(1.3)', h: 2.1, r: 0.44, hp: 540, speed: 1.0, dmg: 38, xp: 5, ai: 'shaman', element: 'dendro', orbColor: '#8fd13a' },
-  dendrobrute: { name: '草冠の暴徒',   atlas: 'brute', filter: 'hue-rotate(70deg) saturate(1.3) brightness(0.95)', h: 3.4, r: 0.88, hp: 4100, speed: 1.4, dmg: 135, xp: 16, ai: 'brute', element: 'dendro', elite: true },
-  mercenary: { name: '砂漠の傭兵',     atlas: 'sumeru_mercenary', h: 2.2, r: 0.46, hp: 520, speed: 1.2, dmg: 85, xp: 4, ai: 'chopper', element: null },
+  dendroshaman: { name: '草のシャーマン', atlas: 'shaman', filter: 'hue-rotate(75deg) saturate(1.3)', h: 2.1, r: 0.44, hp: 200, speed: 1.0, dmg: 30, xp: 5, ai: 'shaman', element: 'dendro', orbColor: '#8fd13a' },
+  dendrobrute: { name: '草冠の暴徒',   atlas: 'brute', filter: 'hue-rotate(70deg) saturate(1.3) brightness(0.95)', h: 3.4, r: 0.88, hp: 3000, speed: 1.3, dmg: 100, xp: 16, ai: 'brute', element: 'dendro', elite: true },
+  mercenary: { name: '砂漠の傭兵',     atlas: 'sumeru_mercenary', h: 2.2, r: 0.46, hp: 200, speed: 1.5, dmg: 50, xp: 4, ai: 'chopper', element: null },
   mushroom_beast: { name: '大茸の森獣', atlas: 'mushroom_beast', h: 4.4, r: 1.35, hp: 540000, speed: 0.95, dmg: 230, xp: 90, ai: 'shroom', element: 'dendro', boss: true, bossTitle: '胞子の主', mid: true },
-  nahida:    { name: 'ナヒーダ',       atlas: 'nahida', h: 2.5, r: 0.55, hp: 4200000, speed: 1.4, dmg: 260, xp: 160, ai: 'nahida', element: 'dendro', boss: true, final: true, bossTitle: '草神', icon: 'nahida' },
+  nahida:    { name: 'ナヒーダ',       atlas: 'nahida', h: 2.5, r: 0.55, hp: 4200000, speed: 1.4, dmg: 260, xp: 160, ai: 'nahida', element: 'dendro', boss: true, final: true, bossTitle: '草神', icon: 'nahida',
+             lines: { low: 'どうして……？　夢を見ていれば、誰も傷つかずにすんだのに。', death: '……これが、あなたの選んだ答えなのね。……おやすみなさい。もう、夢は見られないけれど。' } },
   nahida_clone: { name: 'ナヒーダの幻影', atlas: 'nahida', filter: 'saturate(0.5) brightness(1.35) opacity(0.62)', h: 2.5, r: 0.5, hp: 60000, speed: 1.6, dmg: 150, xp: 0, ai: 'nahidaClone', element: 'dendro', noStageMul: true, clone: true },
 };
 
@@ -293,125 +297,156 @@ G.data.stages = {
   };
 })();
 
-/* ---------------- permanent upgrades bought with Mora (owner: PROGRESSION / BALANCE) ----------------
-   per: value added per level (fractions are %). glyph: SVG glyph key used by G.progressionUI.
-   cost(level) = base × growth^level (rounded to 10) — see G.data.metaCost.
-   Balance v5: the un-upgraded Amber is deliberately weak (slow bow, short aim, 1 arrow). These home upgrades are the
-   main power curve — a fresh save buys 1–3 stars per run, and a maxed map turns the run into a screen-filling 無双. */
+/* ---------------- 天賦の星図 (owner: TALENT) — permanent upgrades bought with Mora, PER CHARACTER (v6) ----------------
+   Owner 2026-10-03: every character owns its OWN complete star map (levels bought for one never affect another), and
+   every map has the SAME layout (G.data.metaTree): 6 branches, each about one theme only —
+     left  (わざ):   通常攻撃の星 / 元素スキルの星 / 元素爆発の星
+     right (ちから): 攻撃の星 / 守りの星 / 宝の星
+   G.data.meta = node templates (generic text). G.data.metaText[charId][key] overrides name/desc/glyph/max/per/cost for
+   that character's kit (e.g. n_sp = 狙い撃ち for Amber, 剣の本数 for Xingqiu …). Always read a node through
+   G.progression.metaDef(key, charId). Levels: G.save.data.metaC[charId][key] (G.progression.metaLevels(charId)).
+   per: value added per level (pct: fraction shown as %). cost(level) = base × growth^level (rounded up to 10). */
 G.data.meta = {
-  power:      { name: '攻撃力',       glyph: 'atk',    desc: '攻撃力 +10%',             max: 20, per: 0.10, pct: true, base: 40,  growth: 1.2 },
-  haste:      { name: '攻撃速度',     glyph: 'haste',  desc: '矢もランチャーも速く +8%', max: 15, per: 0.08, pct: true, base: 50,  growth: 1.22 },
-  multishot:  { name: '矢の本数',     glyph: 'arrows', desc: '同時に撃つ矢 +1本',        max: 3,  per: 1,               base: 700, growth: 3.2 },
-  vitality:   { name: '最大HP',       glyph: 'hp',     desc: '最大HP +10%',             max: 15, per: 0.10, pct: true, base: 40,  growth: 1.22 },
-  defense:    { name: '防御力',       glyph: 'def',    desc: '防御力 +10',              max: 10, per: 10,              base: 70,  growth: 1.3 },
-  speed:      { name: '移動速度',     glyph: 'speed',  desc: '移動速度 +4%',            max: 8,  per: 0.04, pct: true, base: 50,  growth: 1.3 },
-  range:      { name: '射程',         glyph: 'eye',    desc: '矢がとどく距離 +10%（遠くの敵もねらう）', max: 8, per: 0.10, pct: true, base: 60, growth: 1.3 },
-  recharge:   { name: '元素チャージ効率', glyph: 'er', desc: 'エネルギー回収 +8%',      max: 5,  per: 0.08, pct: true, base: 150, growth: 1.4 },
-  crit_rate:  { name: '会心率',       glyph: 'cr',     desc: '会心率 +4%',              max: 10, per: 0.04, pct: true, base: 120, growth: 1.3 },
-  crit_damage:{ name: '会心ダメージ', glyph: 'cd',     desc: '会心ダメージ +10%',       max: 10, per: 0.10, pct: true, base: 120, growth: 1.3 },
-  gather:     { name: '回収範囲',     glyph: 'magnet', desc: '回収範囲 +10%',           max: 5,  per: 0.10, pct: true, base: 60,  growth: 1.35 },
-  mora:       { name: 'モラ獲得量',   glyph: 'mora',   desc: 'モラ獲得量 +10%',         max: 10, per: 0.10, pct: true, base: 80,  growth: 1.3 },
-  chest:      { name: '宝箱発見率',   glyph: 'chest',  desc: '宝箱が出やすくなる +15%', max: 5,  per: 0.15, pct: true, base: 160, growth: 1.4 },
-  reroll:     { name: '引き直し',     glyph: 'reroll', desc: 'レベルアップの引き直し +1回', max: 3, per: 1,          base: 300, growth: 2.2 },
-  revival:    { name: '不屈の心',     glyph: 'revive', desc: '1回だけ HP50% で復活',    max: 1,  per: 1,               base: 1200 },
-  wisdom:     { name: '風の知恵',     glyph: 'book',   desc: '経験値 +6%（レベルアップが早くなる）', max: 15, per: 0.06, pct: true, base: 50, growth: 1.22 },
-  ks_fire:    { name: '烈火の心',     glyph: 'boom',   desc: '全ダメージ +10%',         max: 3,  per: 0.10, pct: true, base: 1500, growth: 1.8, keystone: true },
-  ks_guard:   { name: '岩の守り',     glyph: 'shield', desc: '出撃時シールド（HP30%）・受けるダメージ -8%', max: 1, per: 1, base: 2000, keystone: true },
-  ks_burst:   { name: '風の翼',       glyph: 'er',     desc: '出撃時 元素爆発が満タン・クールタイム -8%', max: 1, per: 1, base: 2000, keystone: true },
-  ks_luck:    { name: '幸運の星',     glyph: 'star',   desc: '金色カード・大当たりが出やすい +50%', max: 3, per: 0.5, pct: true, base: 1500, growth: 1.8, keystone: true },
+  // 通常攻撃の星
+  n_dmg:      { name: '通常攻撃の威力', glyph: 'arrows', desc: '通常攻撃のダメージ +8%',     max: 10, per: 0.08, pct: true, base: 50,  growth: 1.25 },
+  n_spd:      { name: '通常攻撃の速さ', glyph: 'haste',  desc: '通常攻撃が速くなる +8%',     max: 10, per: 0.08, pct: true, base: 60,  growth: 1.27 },
+  range:      { name: '射程',           glyph: 'eye',    desc: '通常攻撃がとどく距離 +10%', max: 8,  per: 0.10, pct: true, base: 60,  growth: 1.3 },
+  n_sp:       { name: '通常攻撃の数',   glyph: 'arrows', desc: '通常攻撃の数 +1',            max: 3,  per: 1,               base: 700, growth: 3.2 },
+  n_ks:       { name: '通常攻撃の極み', glyph: 'star',   desc: '',                           max: 1,  per: 1,               base: 1800, keystone: true },
+  // 元素スキルの星
+  s_dmg:      { name: '元素スキルの威力', glyph: 'boom', desc: '元素スキルのダメージ +10%', max: 10, per: 0.10, pct: true, base: 60,  growth: 1.25 },
+  s_cd:       { name: 'スキルの待ち時間', glyph: 'haste', desc: '元素スキルのクールタイム -5%', max: 6, per: 0.05, pct: true, neg: true, base: 100, growth: 1.35 },
+  s_sp:       { name: 'スキルの技',     glyph: 'star',   desc: '',                           max: 3,  per: 0.10, pct: true, base: 300, growth: 1.8 },
+  s_ks:       { name: 'スキルの極み',   glyph: 'star',   desc: '',                           max: 1,  per: 1,               base: 1800, keystone: true },
+  // 元素爆発の星
+  q_dmg:      { name: '元素爆発の威力', glyph: 'rain',   desc: '元素爆発のダメージ +10%',    max: 10, per: 0.10, pct: true, base: 60,  growth: 1.25 },
+  recharge:   { name: '元素チャージ効率', glyph: 'er',   desc: 'エネルギー回収 +8%',         max: 5,  per: 0.08, pct: true, base: 150, growth: 1.4 },
+  q_cd:       { name: '爆発の待ち時間', glyph: 'haste',  desc: '元素爆発のクールタイム -5%', max: 6,  per: 0.05, pct: true, neg: true, base: 100, growth: 1.35 },
+  ks_burst:   { name: '風の翼',         glyph: 'er',     desc: '出撃した時から 元素爆発が満タン・元素爆発のダメージ +20%', max: 1, per: 1, base: 2000, keystone: true },
+  // 攻撃の星
+  power:      { name: '攻撃力',         glyph: 'atk',    desc: '攻撃力 +10%',                max: 20, per: 0.10, pct: true, base: 40,  growth: 1.2 },
+  crit_rate:  { name: '会心率',         glyph: 'cr',     desc: '会心率 +4%',                 max: 10, per: 0.04, pct: true, base: 120, growth: 1.3 },
+  crit_damage:{ name: '会心ダメージ',   glyph: 'cd',     desc: '会心ダメージ +10%',          max: 10, per: 0.10, pct: true, base: 120, growth: 1.3 },
+  ks_fire:    { name: '烈火の心',       glyph: 'boom',   desc: '全ダメージ +10%',            max: 3,  per: 0.10, pct: true, base: 1500, growth: 1.8, keystone: true },
+  // 守りの星
+  vitality:   { name: '最大HP',         glyph: 'hp',     desc: '最大HP +10%',                max: 15, per: 0.10, pct: true, base: 40,  growth: 1.22 },
+  defense:    { name: '防御力',         glyph: 'def',    desc: '防御力 +10',                 max: 10, per: 10,              base: 70,  growth: 1.3 },
+  speed:      { name: '移動速度',       glyph: 'speed',  desc: '移動速度 +4%',               max: 8,  per: 0.04, pct: true, base: 50,  growth: 1.3 },
+  ks_guard:   { name: '不屈の心',       glyph: 'revive', desc: '1回だけ HP50% で復活！ 出撃時に シールド（HP30%）', max: 1, per: 1, base: 2000, keystone: true },
+  // 宝の星
+  gather:     { name: '回収範囲',       glyph: 'magnet', desc: '回収範囲 +10%',              max: 5,  per: 0.10, pct: true, base: 60,  growth: 1.35 },
+  wisdom:     { name: '風の知恵',       glyph: 'book',   desc: '経験値 +6%（レベルアップが早くなる）', max: 15, per: 0.06, pct: true, base: 50, growth: 1.22 },
+  mora:       { name: 'モラ獲得量',     glyph: 'mora',   desc: 'モラ獲得量 +10%',            max: 10, per: 0.10, pct: true, base: 80,  growth: 1.3 },
+  chest:      { name: '宝箱発見率',     glyph: 'chest',  desc: '宝箱が出やすくなる +15%',    max: 5,  per: 0.15, pct: true, base: 160, growth: 1.4 },
+  reroll:     { name: '引き直し',       glyph: 'reroll', desc: 'レベルアップの引き直し +1回', max: 3, per: 1,               base: 300, growth: 2.2 },
+  ks_luck:    { name: '幸運の星',       glyph: 'star',   desc: '金色カード・大当たりが出やすい +50%', max: 3, per: 0.5, pct: true, base: 1500, growth: 1.8, keystone: true },
 };
-G.data.metaOrder = ['power', 'haste', 'multishot', 'vitality', 'defense', 'speed', 'range', 'crit_rate', 'crit_damage', 'recharge', 'gather', 'mora', 'chest', 'reroll', 'revival', 'wisdom', 'ks_fire', 'ks_guard', 'ks_burst', 'ks_luck'];
-/* 天賦の星図 layout (viewBox 400×300, root at centre). parent: node that needs Lv1+ first. br: branch colour key. */
-G.data.metaTree = {
-  root: { x: 200, y: 150 },
-  branches: { atk: { name: '攻撃の星', c: '#ff8a5c' }, def: { name: '守りの星', c: '#6ff09a' }, wind: { name: '風の星', c: '#5cf2c8' }, gold: { name: '宝の星', c: '#ffd24a' } },
-  nodes: {
-    power: { x: 150, y: 108, parent: 'root', br: 'atk' }, crit_rate: { x: 112, y: 62, parent: 'power', br: 'atk' },
-    crit_damage: { x: 62, y: 40, parent: 'crit_rate', br: 'atk' }, ks_fire: { x: 28, y: 88, parent: 'crit_damage', br: 'atk' },
-    haste: { x: 104, y: 126, parent: 'power', br: 'atk' }, multishot: { x: 62, y: 150, parent: 'haste', br: 'atk' },
-    vitality: { x: 150, y: 192, parent: 'root', br: 'def' }, defense: { x: 112, y: 238, parent: 'vitality', br: 'def' },
-    revival: { x: 62, y: 260, parent: 'defense', br: 'def' }, ks_guard: { x: 28, y: 212, parent: 'revival', br: 'def' },
-    speed: { x: 250, y: 108, parent: 'root', br: 'wind' }, wisdom: { x: 288, y: 62, parent: 'speed', br: 'wind' },
-    recharge: { x: 338, y: 40, parent: 'wisdom', br: 'wind' }, ks_burst: { x: 372, y: 88, parent: 'recharge', br: 'wind' },
-    range: { x: 296, y: 126, parent: 'speed', br: 'wind' },
-    gather: { x: 250, y: 192, parent: 'root', br: 'gold' }, mora: { x: 288, y: 238, parent: 'gather', br: 'gold' },
-    chest: { x: 338, y: 260, parent: 'mora', br: 'gold' }, ks_luck: { x: 372, y: 212, parent: 'chest', br: 'gold' },
-    reroll: { x: 214, y: 262, parent: 'gather', br: 'gold' },
-  },
-};
-/* キャラ専用の星 (owner: PROGRESSION): every character owns one extra branch at the top of the star map. These stars live in
-   G.save.data.meta like the shared ones (keys sp_<char>_*), are shown only while that character is selected and only work
-   for that character (G.progression.computeStats). Shared stars (攻撃力・矢の本数・射程 …) keep working for everyone;
-   metaText renames them per character (矢の本数 → 剣の本数 …). */
-G.data.metaChar = {
-  amber:     { name: '矢の星', c: '#ff7a3d' },
-  xingqiu:   { name: '剣の星', c: '#4fb4ff' },
-  ningguang: { name: '石粒の星', c: '#ffcf4a' },
-  chongyun:  { name: '大剣の星', c: '#9ff0ff' },
-};
-(function () {
-  const M = G.data.meta;
-  // same shape for every character: 通常攻撃 → (スキル / 爆発) → 要の星
-  const POS = { n: [200, 106, 'root'], s: [162, 62, 'n'], q: [238, 62, 'n'], k: [200, 30, 's'] };
-  const STAR = (id, o) => Object.assign({ max: 5, pct: true, base: 120, growth: 1.45, char: id }, o);
-  const KS = (id, o) => Object.assign({ max: 1, per: 1, base: 1800, keystone: true, char: id }, o);
-  const defs = {
-    amber: {
-      n: STAR('amber', { name: '炎の矢の威力', glyph: 'arrows', desc: '炎の矢のダメージ +8%', per: 0.08 }),
-      s: STAR('amber', { name: '伯爵の火薬', glyph: 'boom', desc: 'ウサギ伯爵のダメージ +10%', per: 0.10 }),
-      q: STAR('amber', { name: '矢の雨の威力', glyph: 'rain', desc: '矢の雨のダメージ +10%', per: 0.10 }),
-      k: KS('amber', { name: '百発百中', glyph: 'eye', desc: '狙い撃ちが 25% 速くなる' }),
+G.data.metaOrder = ['n_dmg', 'n_spd', 'range', 'n_sp', 'n_ks', 's_dmg', 's_cd', 's_sp', 's_ks', 'q_dmg', 'recharge', 'q_cd', 'ks_burst',
+  'power', 'crit_rate', 'crit_damage', 'ks_fire', 'vitality', 'defense', 'speed', 'ks_guard', 'gather', 'wisdom', 'mora', 'chest', 'reroll', 'ks_luck'];
+/* 天賦の星図 layout — identical for every character (viewBox 400×300, root at centre).
+   Rows: top / middle / bottom; left side grows to the left (わざ), right side to the right (ちから).
+   Main lane: d = 42, 84, 126, 172 from the centre. Side nodes (射程・引き直し・宝箱) sit half a step out, toward the middle row.
+   parent: node that needs Lv1+ first. br: branch key. */
+G.data.metaTree = (function () {
+  const L = d => 200 - d, Rr = d => 200 + d, T = 40, M = 150, B = 260, TS = 84, BS = 216;
+  return {
+    root: { x: 200, y: 150 },
+    branches: {
+      nrm: { name: '通常攻撃の星', c: '#ff9a5c', row: T, side: -1 }, skl: { name: '元素スキルの星', c: '#c08cff', row: M, side: -1 },
+      bst: { name: '元素爆発の星', c: '#5cc8ff', row: B, side: -1 },
+      atk: { name: '攻撃の星', c: '#ff6b78', row: T, side: 1 }, def: { name: '守りの星', c: '#6ff09a', row: M, side: 1 },
+      gold: { name: '宝の星', c: '#ffd24a', row: B, side: 1 },
     },
-    xingqiu: {
-      n: STAR('xingqiu', { name: '剣の威力', glyph: 'blade', desc: '回る剣のダメージ +8%', per: 0.08 }),
-      s: STAR('xingqiu', { name: '画雨籠山の威力', glyph: 'shield', desc: '元素スキルのダメージ +10%', per: 0.10 }),
-      q: STAR('xingqiu', { name: '裁雨留虹の威力', glyph: 'rain', desc: '元素爆発のダメージ +10%', per: 0.10 }),
-      k: KS('xingqiu', { name: '流水の心', glyph: 'haste', desc: '剣の休み時間 -15%（すぐ また回る）' }),
-    },
-    ningguang: {
-      n: STAR('ningguang', { name: '石粒の威力', glyph: 'gem', desc: '石粒のダメージ +8%', per: 0.08 }),
-      s: STAR('ningguang', { name: '璇璣屏の威力', glyph: 'def', desc: '元素スキルのダメージ +10%', per: 0.10 }),
-      q: STAR('ningguang', { name: '天権崩玉の威力', glyph: 'cd', desc: '元素爆発のダメージ +10%', per: 0.10 }),
-      k: KS('ningguang', { name: '宝石の輝き', glyph: 'gem', desc: '一度に飛ばす石粒 +3粒' }),
-    },
-    chongyun: {
-      n: STAR('chongyun', { name: '大剣の威力', glyph: 'gsword', desc: '薙ぎ払いのダメージ +8%', per: 0.08 }),
-      s: STAR('chongyun', { name: '重華積霜の威力', glyph: 'snow', desc: '元素スキルのダメージ +10%', per: 0.10 }),
-      q: STAR('chongyun', { name: '雲開星落の威力', glyph: 'cd', desc: '元素爆発のダメージ +10%', per: 0.10 }),
-      k: KS('chongyun', { name: '剛の剣', glyph: 'eye', desc: '大剣がとどく距離 +15%' }),
+    nodes: {
+      n_dmg: { x: L(42), y: T, parent: 'root', br: 'nrm' }, n_spd: { x: L(84), y: T, parent: 'n_dmg', br: 'nrm' },
+      n_sp: { x: L(126), y: T, parent: 'n_spd', br: 'nrm' }, n_ks: { x: L(172), y: T, parent: 'n_sp', br: 'nrm' },
+      range: { x: L(63), y: TS, parent: 'n_dmg', br: 'nrm' },
+      s_dmg: { x: L(42), y: M, parent: 'root', br: 'skl' }, s_cd: { x: L(84), y: M, parent: 's_dmg', br: 'skl' },
+      s_sp: { x: L(126), y: M, parent: 's_cd', br: 'skl' }, s_ks: { x: L(172), y: M, parent: 's_sp', br: 'skl' },
+      q_dmg: { x: L(42), y: B, parent: 'root', br: 'bst' }, recharge: { x: L(84), y: B, parent: 'q_dmg', br: 'bst' },
+      q_cd: { x: L(126), y: B, parent: 'recharge', br: 'bst' }, ks_burst: { x: L(172), y: B, parent: 'q_cd', br: 'bst' },
+      power: { x: Rr(42), y: T, parent: 'root', br: 'atk' }, crit_rate: { x: Rr(84), y: T, parent: 'power', br: 'atk' },
+      crit_damage: { x: Rr(126), y: T, parent: 'crit_rate', br: 'atk' }, ks_fire: { x: Rr(172), y: T, parent: 'crit_damage', br: 'atk' },
+      vitality: { x: Rr(42), y: M, parent: 'root', br: 'def' }, defense: { x: Rr(84), y: M, parent: 'vitality', br: 'def' },
+      speed: { x: Rr(126), y: M, parent: 'defense', br: 'def' }, ks_guard: { x: Rr(172), y: M, parent: 'speed', br: 'def' },
+      gather: { x: Rr(42), y: B, parent: 'root', br: 'gold' }, wisdom: { x: Rr(84), y: B, parent: 'gather', br: 'gold' },
+      mora: { x: Rr(126), y: B, parent: 'wisdom', br: 'gold' }, ks_luck: { x: Rr(172), y: B, parent: 'mora', br: 'gold' },
+      reroll: { x: Rr(63), y: BS, parent: 'gather', br: 'gold' }, chest: { x: Rr(147), y: BS, parent: 'mora', br: 'gold' },
     },
   };
-  for (const id in defs) {
-    const nodes = {};
-    for (const s in defs[id]) {
-      const key = 'sp_' + id + '_' + s, p = POS[s];
-      M[key] = defs[id][s];
-      nodes[key] = { x: p[0], y: p[1], parent: p[2] === 'root' ? 'root' : 'sp_' + id + '_' + p[2], br: 'char' };
-    }
-    G.data.metaChar[id].nodes = nodes;
-  }
 })();
-/* per-character names / texts for the SHARED stars (the effect is the same key; each kit reads it its own way) */
+/* per-character kit texts / special nodes. Effects: G.progression.baseStats / applyCharStars. */
 G.data.metaText = {
+  amber: {
+    n_dmg: { name: '炎の矢の威力', desc: '炎の矢のダメージ +8%' },
+    n_spd: { name: '矢を撃つ速さ', desc: '炎の矢を はやく撃てる +8%' },
+    range: { desc: '矢がとどく距離 +10%（遠くの敵もねらう）' },
+    n_sp: { name: '狙い撃ち', glyph: 'boom', desc: 'ときどき 大きな炎の矢「狙い撃ち」を撃てるようになる', max: 1, base: 2000 },
+    n_ks: { name: '百発百中', glyph: 'eye', desc: '狙い撃ちが 25% はやく撃てる（「狙い撃ち」の星が ひつよう）' },
+    s_dmg: { name: '伯爵の火薬', desc: 'ウサギ伯爵のダメージ +10%' },
+    s_cd: { name: '伯爵のおかわり', desc: 'ウサギ伯爵のクールタイム -5%' },
+    s_sp: { name: '伯爵の大爆発', glyph: 'boom', desc: 'ウサギ伯爵の爆発が大きくなる +10%' },
+    s_ks: { name: '伯爵ふたり', glyph: 'star', desc: 'ウサギ伯爵を 2回 ためて使える' },
+    q_dmg: { name: '矢の雨の威力', desc: '矢の雨のダメージ +10%' },
+  },
   xingqiu: {
-    multishot: { name: '剣の本数', desc: '回る剣 +1本' },
-    haste: { desc: '剣もランチャーも速く +8%' },
+    n_dmg: { name: '剣の威力', glyph: 'blade', desc: '回る剣のダメージ +8%' },
+    n_spd: { name: '剣の回る速さ', desc: '剣が また回るまでの時間が みじかい +8%' },
     range: { desc: '剣の輪が大きくなる +10%（最大+40%）' },
+    n_sp: { name: '剣の本数', glyph: 'blade', desc: '回る剣 +1本' },
+    n_ks: { name: '流水の心', glyph: 'haste', desc: '剣の休み時間 -15%（すぐ また回る）' },
+    s_dmg: { name: '画雨籠山の威力', glyph: 'blade', desc: '元素スキルのダメージ +10%' },
+    s_sp: { name: '雨すだれの守り', glyph: 'shield', desc: '雨すだれの剣がある間 受けるダメージ -5%', per: 0.05 },
+    s_ks: { name: '虹剣勢', glyph: 'blade', desc: '雨すだれの剣 +2本' },
+    q_dmg: { name: '裁雨留虹の威力', desc: '元素爆発のダメージ +10%' },
   },
   ningguang: {
-    multishot: { name: '石粒の数', desc: '一度に飛ばす石粒 +2粒' },
-    haste: { desc: '石粒もランチャーも速く +8%' },
+    n_dmg: { name: '石粒の威力', glyph: 'gem', desc: '石粒のダメージ +8%' },
+    n_spd: { name: '石粒を飛ばす速さ', desc: '石粒を はやく飛ばせる +8%' },
     range: { desc: '石粒がねらう距離 +10%（遠くの敵もねらう）' },
+    n_sp: { name: '石粒の数', glyph: 'gem', desc: '一度に飛ばす石粒 +2粒' },
+    n_ks: { name: '宝石の輝き', glyph: 'gem', desc: '一度に飛ばす石粒 +3粒' },
+    s_dmg: { name: '璇璣屏の威力', glyph: 'def', desc: '元素スキルのダメージ +10%' },
+    s_sp: { name: '大きな屏風', glyph: 'def', desc: '璇璣屏が長くなる +10%' },
+    s_ks: { name: '砕ける屏風', glyph: 'boom', desc: '璇璣屏が こわれる時 岩の大爆発！' },
+    q_dmg: { name: '天権崩玉の威力', glyph: 'gem', desc: '元素爆発のダメージ +10%' },
   },
   chongyun: {
-    multishot: { name: '連撃の数', desc: '1回に振る数 +1（最大6連撃）' },
-    haste: { desc: '大剣もランチャーも速く +8%' },
+    n_dmg: { name: '大剣の威力', glyph: 'gsword', desc: '薙ぎ払いのダメージ +8%' },
+    n_spd: { name: '大剣を振る速さ', desc: '大剣の休み時間が みじかい +8%' },
     range: { desc: '大剣がとどく距離 +10%（最大+40%）' },
+    n_sp: { name: '連撃の数', glyph: 'gsword', desc: '1回に振る数 +1（最大6連撃）' },
+    n_ks: { name: '剛の剣', glyph: 'eye', desc: '大剣がとどく距離 +15%' },
+    s_dmg: { name: '重華積霜の威力', glyph: 'snow', desc: '元素スキルのダメージ +10%' },
+    s_sp: { name: '霜の加速', glyph: 'haste', desc: '霜の領域の中で 攻撃が速い +5%', per: 0.05 },
+    s_ks: { name: '広がる霜', glyph: 'snow', desc: '霜の領域が 30% 広くなる' },
+    q_dmg: { name: '雲開星落の威力', glyph: 'cd', desc: '元素爆発のダメージ +10%' },
   },
 };
-G.data.metaCost = function (key, level) {
-  const d = G.data.meta[key]; const base = d ? d.base : 100;
+/** node definition for one character (template + kit overrides) — G.progression.metaDef is the public helper */
+G.data.metaDefFor = function (key, charId) {
+  const d = G.data.meta[key]; if (!d) return d;
+  const t = charId && G.data.metaText[charId] && G.data.metaText[charId][key];
+  return t ? Object.assign({}, d, t) : d;
+};
+G.data.metaCost = function (key, level, charId) {
+  const d = G.data.metaDefFor(key, charId); const base = d ? d.base : 100;
   return Math.ceil(base * Math.pow(d && d.growth || 1.38, level) / 10) * 10;
+};
+/* The OLD shared star map (before v6) — kept ONLY to refund the Mora spent on it (G.progression.migrateMeta).
+   key: [base, growth, max]; sp_<char>_n/s/q = [120, 1.45, 5], sp_<char>_k = [1800, 1.38, 1]. */
+G.data.metaOld = {
+  power: [40, 1.2, 20], haste: [50, 1.22, 15], multishot: [700, 3.2, 3], vitality: [40, 1.22, 15], defense: [70, 1.3, 10],
+  speed: [50, 1.3, 8], range: [60, 1.3, 8], recharge: [150, 1.4, 5], crit_rate: [120, 1.3, 10], crit_damage: [120, 1.3, 10],
+  gather: [60, 1.35, 5], mora: [80, 1.3, 10], chest: [160, 1.4, 5], reroll: [300, 2.2, 3], revival: [1200, 1.38, 1],
+  wisdom: [50, 1.22, 15], ks_fire: [1500, 1.8, 3], ks_guard: [2000, 1.38, 1], ks_burst: [2000, 1.38, 1], ks_luck: [1500, 1.8, 3],
+};
+G.data.metaCostOld = function (key, level) {
+  let o = G.data.metaOld[key];
+  const sp = /^sp_[a-z]+_([nsqk])$/.exec(key);
+  if (!o && sp) o = sp[1] === 'k' ? [1800, 1.38, 1] : [120, 1.45, 5];
+  if (!o || level >= o[2]) return 0;
+  return Math.ceil(o[0] * Math.pow(o[1], level) / 10) * 10;
 };
 /** XP (element particles) needed to go from level L to L+1  (balance v5).
    Un-upgraded: Lv2–3 in the first minute, ~Lv6 at 3:00. With 風の知恵/回収 + more kills the same curve flies by

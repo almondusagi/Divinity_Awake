@@ -440,7 +440,7 @@ G.hud = (function () {
 
     /* ===== off-screen pointers ===== */
     {
-      if (R.pickups) { let n = 0; for (let i = 0; i < R.pickups.length && n < 4; i++) { const o = R.pickups[i]; if (o.type === 'chest' || o.type === 'relic') { offPtr(ctx, o.x, o.y, o.type === 'chest' ? 'chest' : 'relic', '#ffd86b', false, now); n++; } } }
+      if (R.pickups) { let n = 0; for (let i = 0; i < R.pickups.length && n < 4; i++) { const o = R.pickups[i]; if (o.type === 'chest' || o.type === 'relic' || o.type === 'godchest') { offPtr(ctx, o.x, o.y, o.type === 'relic' ? 'relic' : 'chest', '#ffd86b', o.type === 'godchest', now); n++; } } }
       if (R.boss && !R.boss.dead) offPtr(ctx, R.boss.x, R.boss.y, R.boss.def.atlas === 'venti' ? 'venti' : 'ruin', '#ff5a5a', true, now);
     }
 
@@ -573,7 +573,7 @@ G.hud = (function () {
     big('evo', 'EVOLUTION ・ 進化！', up ? up.name : '進化', up && up.short ? up.short : '');
     refreshOwned(G.run);
   });
-  on('bossKilled', e => { if (!e || !e.def) return; big('kill', 'DEFEATED', e.def.name + ' 撃破！', e.def.final ? '' : 'ごほうびの宝箱をひろおう！', 2600); });
+  on('bossKilled', e => { if (!e || !e.def) return; if (e.def.final) { big('fall', 'DEFEATED', e.def.name + ' 撃破', '残された宝箱をひろおう', 3400); return; } big('kill', 'DEFEATED', e.def.name + ' 撃破！', 'ごほうびの宝箱をひろおう！', 2600); });
   on('bossEnrage', e => { add(E('div', { class: 'bn bn-note' }, E('div', { class: 'nx', style: 'color:#ff9a8a' }, ((e && e.def && e.def.name) || 'ボス') + ' が本気になった！')), 2700); });
   G.bus.on('upgrade', () => { if (G.run) refreshOwned(G.run); });
   G.bus.on('runStart', R => { resetState(); layer.innerHTML = ''; refreshOwned(R); lw = -1; touchIcons(R); });

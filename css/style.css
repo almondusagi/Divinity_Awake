@@ -1488,3 +1488,35 @@ body.reduced-fx .insp-glow { animation-duration: 6s; opacity: .25; } body.reduce
   .pg-pc { padding: 5px 6px 6px; }
   .pg-pacts .pg-btn, .pg-pre-h .pg-btn { min-height: 34px; font-size: 12.5px; padding: 2px 10px; }
 }
+/* 聖遺物 v6 (owner: RELIC, js/relics.js) — 開封カードは全部同じ大きさ・サブOP 4行ぶんを常に確保 / 部位アイコン画像 */
+.pg-chest .pg-rvwrap { --rvk: 1; align-items: flex-start; flex-wrap: nowrap; max-width: calc(100vw - 16px); }
+.pg-chest .pg-rvwrap .pg-rvslot { width: clamp(104px, 15.6vw, 196px); flex: none; }
+.pg-chest .pg-rvwrap .pg-rvc { width: 100%; height: clamp(250px, 56vh, 390px); min-height: 0; display: flex; flex-direction: column; }
+.pg-card.pg-rvc .pg-top { height: 36%; min-height: 0; flex: none; }
+.pg-rvc .pg-top .pg-art { height: 92%; max-width: 86%; transform: translate(-50%, -48%); }
+.pg-rvc .pg-top .pg-art img { filter: drop-shadow(0 4px 6px #000a) drop-shadow(0 0 10px var(--sc, #fff6)); }
+.pg-rvc .pg-new { font-size: calc(var(--rvk) * clamp(10px, 1.9vh, 13px)); top: 5px; right: 5px; padding: 1px 7px; }
+.pg-rvbody { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: stretch; gap: calc(var(--rvk) * 2px);
+  padding: calc(var(--rvk) * 5px) 7px 7px; background: linear-gradient(#0e1c27, #132634); text-align: center; }
+.pg-rvbody > * { flex: none; min-width: 0; white-space: nowrap; overflow: hidden; line-height: 1.22; }
+.pg-rvbody .pg-stars { align-self: center; font-size: calc(var(--rvk) * clamp(10px, 2vh, 14px)); }
+.pg-rvname { font-weight: 900; font-size: calc(var(--rvk) * clamp(13px, 2.6vh, 18px)); text-shadow: 0 2px 0 #0008; }
+.pg-rvset { font-weight: 800; font-size: calc(var(--rvk) * clamp(10px, 1.9vh, 13px)); color: var(--sc, #bfe); margin-top: -1px; }
+.pg-rvmain { font-weight: 900; font-size: calc(var(--rvk) * clamp(12px, 2.4vh, 16px)); color: #ffe07a; padding: 1px 0 3px; border-bottom: 1px solid #ffffff1f; }
+.pg-rvsubs { list-style: none; margin: 0; padding: 0; flex: 1 1 0; min-height: 0; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); align-items: center; overflow: hidden; }
+.pg-rvsubs li { min-width: 0; white-space: nowrap; overflow: hidden; font-weight: 700; color: #e8f1ef; font-size: calc(var(--rvk) * clamp(10.5px, 2.15vh, 14px)); line-height: 1.2; }
+.pg-rvsubs li.e { color: #ffffff2e; }
+@media (max-height: 520px) {
+  .pg-chest .pg-rvwrap .pg-rvc { height: min(250px, 62vh); }
+  .pg-chest .pg-rvwrap .pg-rvslot { width: clamp(100px, 15vw, 150px); }
+  .pg-card.pg-rvc .pg-top { height: 33%; }
+}
+/* piece icon images in the panel (tiles, detail, presets) */
+.pg-rimg { display: flex; align-items: center; justify-content: center; }
+.pg-ricon { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.pg-rp .pg-rimg { width: clamp(40px, 9vh, 60px); height: clamp(40px, 9vh, 60px); margin: 0 auto; filter: drop-shadow(0 2px 4px #000a) drop-shadow(0 0 6px color-mix(in srgb, var(--c, #fff) 45%, transparent)); }
+.pg-inv .pg-rp .pg-rimg { width: 44px; height: 44px; }
+.pg-rcard .pg-rg.pg-rimg { width: 76px; height: 76px; flex: none; filter: drop-shadow(0 3px 5px #000a) drop-shadow(0 0 10px var(--c, #fff6)); }
+.pg-pg i.img { padding: 1px; }
+.pg-pg i.img .pg-ricon { width: 22px; height: 22px; }
+.pg-pg i { height: 26px; }

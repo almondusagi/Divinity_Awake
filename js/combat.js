@@ -6,8 +6,12 @@
 'use strict';
 G.combat = (function () {
   const U = G.u;
-  const AURA_ELEMENTS = { pyro: 1, hydro: 1, cryo: 1, electro: 1 };
+  // dendro (草) is a real aura since v6 (DENDRO): the 草型ランチャー applies it to any enemy, Sumeru's dendro enemies carry it innately
+  const AURA_ELEMENTS = { pyro: 1, hydro: 1, cryo: 1, electro: 1, dendro: 1 };
   const REACT = {
+    burning:      { name: '燃焼',   color: '#ff9a3d' },
+    quicken:      { name: '激化',   color: '#b6ff4a' },
+    bloom:        { name: '開花',   color: '#9dff6a' },
     vaporize:     { name: '蒸発',   color: '#ffb27a' },
     melt:         { name: '溶解',   color: '#ffcf9a' },
     overloaded:   { name: '過負荷', color: '#ff6b8b' },
@@ -24,7 +28,7 @@ G.combat = (function () {
   // reaction chain ("反応連鎖"): reactions within a short window build a counter shown at milestones
   const chain = { n: 0, t: -99, shown: 0 };
 
-  function initRun(R) { R.damageBySrc = {}; R.reactions = {}; R.damageDealt = R.damageDealt || 0; lastHitstop = -1; lastCrystal = -1; lastKick = -1; lastMass = -99; chain.n = 0; chain.t = -99; chain.shown = 0; R.maxChain = 0; }
+  function initRun(R) { R.damageBySrc = {}; R.reactions = {}; R.damageDealt = R.damageDealt || 0; lastHitstop = -1; lastCrystal = -1; lastKick = -1; lastMass = -99; chain.n = 0; chain.t = -99; chain.shown = 0; R.maxChain = 0; for (const e of burning) e.burning = false; burning.length = 0; cores.length = 0; R.dendroFx = null; lastBloomFx = -1; }
   const reduced = () => !!(G.save && G.save.data.settings.reducedFx);
 
   /** transformative reaction base damage (scales with run level like Genshin's level multiplier) */
@@ -63,14 +67,14 @@ G.combat = (function () {
     if (!aura && e.def.element && AURA_ELEMENTS[e.def.element] && now >= (e.innateNext || 0) && el !== e.def.element) {
       aura = e.aura = { el: e.def.element, gauge: 1, until: now + 1e6, innate: true };
     }
-    if (el === 'anemo') {
-      if (aura) { reaction = 'swirl'; const ael = aura.el; aura.gauge -= 0.5 * gauge; if (aura.gauge <= 0 || aura.innate) { e.aura = null; if (aura.innate) e.innateNext = now + 1.2; } swirl(R, e, ael); }
+    if (el === 'anemo') { // Genshin: anemo does not swirl dendro
+      if (aura && aura.el !== 'dendro') { reaction = 'swirl'; const ael = aura.el; aura.gauge -= 0.5 * gauge; if (aura.gauge <= 0 || aura.innate) { e.aura = null; if (aura.innate) e.innateNext = now + 1.2; } swirl(R, e, ael); }
       else if (e.frozenUntil > now) { reaction = 'swirl'; swirl(R, e, 'cryo'); }
       return { mul, reaction };
     }
     if (el === 'geo') {
       if (e.frozenUntil > now) { reaction = 'shatter'; e.frozenUntil = now; }
-      else if (aura) {
+      else if (aura && aura.el !== 'dendro') { // geo does not crystallize dendro
         reaction = 'crystallize';
         if (R.time - lastCrystal > 0.45) { lastCrystal = R.time; G.loot && G.loot.dropCrystal && G.loot.dropCrystal(R, e.x + U.rand(-0.4, 0.4), e.y + U.rand(-0.4, 0.4), aura.el); }
         aura.gauge -= 0.5 * gauge; if (aura.gauge <= 0 || aura.innate) { e.aura = null; if (aura.innate) e.innateNext = now + 1.2; }
@@ -80,6 +84,7 @@ G.combat = (function () {
     if (!aura) { e.aura = { el, gauge, until: now + 3 + 4 * gauge }; return { mul, reaction }; }
     const a = aura.el;
     if (a === el) { aura.gauge = Math.max(aura.gauge, gauge); aura.until = Math.max(aura.until, now + 3 + 4 * gauge); return { mul, reaction }; }
+    if (a === 'dendro' || el === 'dendro') return dendroReact(R, e, aura, a === 'dendro' ? el : a, now);
     switch (a + '+' + el) {
       case 'hydro+pyro': reaction = 'vaporize'; mul = 1.5; break;
       case 'pyro+hydro': reaction = 'vaporize'; mul = 2; break;
@@ -103,9 +108,142 @@ G.combat = (function () {
   }
 
   function freeze(R, e, dur) {
+    if (!e || (e.def && e.def.boss)) return; // v6: bosses & mid-bosses can never be frozen (the 凍結 reaction still consumes the aura)
     e.frozenUntil = Math.max(e.frozenUntil || 0, R.time + dur);
     e.kx = e.ky = 0;
     if (!reduced()) G.fx.burst(e.x, e.y - e.def.h * 0.4, 8, '#e6fdff', { max: 4, life: 0.4, size: 0.14 });
+  }
+
+  /* ===================== dendro reactions (owner: DENDRO, v6) =====================
+     燃焼 burning  = 草+炎 (either order): DoT 0.35×reactionBase every 0.5 s for 4 s, 35% chance per tick to spread to a
+                    nearby dendro enemy (3 s). Flames are drawn on the enemy. Re-igniting a burning enemy only refreshes it.
+     激化 quicken  = 草+雷: an extra hit 1.2×reactionBase now, and for 6 s every electro / dendro hit on that enemy gets a
+                    flat bonus (+0.4 / +0.5 ×reactionBase, before crit).
+     開花 bloom    = 草+水: a dendro core pops out and bursts after 1 s (1.6×reactionBase, radius 2.0).
+     草+氷 / 草+風 / 草+岩: no reaction (the existing aura stays). Every dendro reaction is throttled per enemy
+     (e.dendroNext: burning 1.0 s, quicken 0.6 s, bloom 1.2 s) and the burning list / core count are capped. */
+  const burning = [], cores = [];
+  const BURN_MAX = 90, CORE_MAX = 28, QUICKEN_T = 6;
+  let lastBloomFx = -1;
+  const QUICKEN_BONUS = { electro: 0.4, dendro: 0.5 };
+  function dendroReact(R, e, aura, other, now) {
+    const res = { mul: 1, reaction: null };
+    if (other !== 'pyro' && other !== 'electro' && other !== 'hydro') return res; // 草+氷 etc.: coexist, nothing happens
+    if ((e.dendroNext || 0) > now) return res;
+    // both elements are used up (an innate aura re-arms 1.2 s later, like the other elemental enemies)
+    if (aura.innate) e.innateNext = now + 1.2;
+    e.aura = null;
+    if (other === 'pyro') {
+      e.dendroNext = now + 1.0;
+      if (!(e.burnUntil > now)) res.reaction = 'burning';
+      ignite(e, now, 4);
+    } else if (other === 'electro') {
+      e.dendroNext = now + 0.6; res.reaction = 'quicken';
+      e.quickenUntil = now + QUICKEN_T; // the extra hit lands right after the triggering hit (see hit → postReact)
+    } else {
+      e.dendroNext = now + 1.2; res.reaction = 'bloom';
+      // a core that is already growing within 1.3 units absorbs this one (a packed crowd makes a few big pops, not 14 stacked ones)
+      let near = false; for (let i = 0; i < cores.length; i++) if (U.dist2(cores[i].x, cores[i].y, e.x, e.y) < 1.69) { near = true; break; }
+      if (!near && cores.length < CORE_MAX) { cores.push({ x: e.x + U.rand(-0.4, 0.4), y: e.y + U.rand(-0.3, 0.3), t: 0 }); ensureDendroFx(R); }
+    }
+    return res;
+  }
+  function ignite(e, now, dur) {
+    e.burnUntil = Math.max(e.burnUntil || 0, now + dur); e.burnNext = Math.min(e.burnNext > now ? e.burnNext : now + 0.25, now + 0.25);
+    if (!e.burning && burning.length < BURN_MAX) { e.burning = true; burning.push(e); }
+    ensureDendroFx(G.run);
+  }
+  /** effects that must happen after the triggering hit has dealt its damage */
+  function postReact(R, e, reaction) {
+    if (reaction === 'quicken' && !e.dead) {
+      hit(R, e, { flat: reactionBase(R, 1.2), element: 'dendro', gauge: 0, src: 'quicken', isReaction: true, noCrit: true, color: '#b6ff4a' });
+      if (budget.text > 0) G.fx.lightning && G.fx.lightning(e.x - 0.4, e.y - e.def.h - 0.6, e.x, e.y - e.def.h * 0.4, '#b6ff4a');
+    } else if (reaction === 'burning' && !reduced()) G.fx.burst(e.x, e.y - e.def.h * 0.4, 8, '#ff9a3d', { max: 6, life: 0.4 });
+  }
+  function dendroUpdate(R, dt) {
+    if (!burning.length && !cores.length) return;
+    const now = R.time;
+    for (let i = burning.length - 1; i >= 0; i--) {
+      const e = burning[i];
+      if (e.dead || !(e.burnUntil > now)) { e.burning = false; burning[i] = burning[burning.length - 1]; burning.pop(); continue; }
+      if (now < e.burnNext) continue;
+      e.burnNext = now + 0.5;
+      hit(R, e, { flat: reactionBase(R, 0.35), element: 'pyro', gauge: 0, src: 'burning', noCrit: true, isReaction: true, quiet: true, noFlash: true, color: '#ff9a3d' });
+      if (!e.dead && U.rnd() < 0.35 && burning.length < BURN_MAX) { // flames jump to a dendro neighbour
+        const o = R.grid.nearest(e.x, e.y, 2.2, q => q !== e && !(q.burnUntil > now) && ((q.aura && q.aura.el === 'dendro' && q.aura.until > now) || q.def.element === 'dendro'));
+        if (o) ignite(o, now, 3);
+      }
+    }
+    for (let i = cores.length - 1; i >= 0; i--) {
+      const c = cores[i]; c.t += dt;
+      if (c.t < 1.0) continue;
+      cores[i] = cores[cores.length - 1]; cores.pop();
+      aoe(R, c.x, c.y, 2.0, { flat: reactionBase(R, 1.6), element: 'dendro', gauge: 0, src: 'bloom', noCrit: true, isReaction: true, knock: 0.8, color: '#9dff6a' });
+      // full burst visuals at most ~8×/s (a big bloom field otherwise floods the effect pool); the rest get a light ring
+      if (R.realTime - lastBloomFx > 0.12 && budget.overloaded-- > 0) {
+        lastBloomFx = R.realTime;
+        G.fx.explosion && G.fx.explosion(c.x, c.y, 2.0, { color: '#8fd13a', kind: 'bloom' });
+        G.enemyAI && G.enemyAI.bossFx && G.enemyAI.bossFx.sheet(R, 'fx_dendro_burst', c.x, c.y - 0.5, 0, 3.6, 3.6, { add: true, fps: 16 });
+        G.audio.sfx('explosion', { x: c.x, y: c.y, vol: 0.6 });
+      }
+      G.fx.ring && G.fx.ring(c.x, c.y, 2.2, '#b6ff6a');
+    }
+  }
+  /* visuals: one persistent air-layer field per run draws flames on burning enemies, the quicken shimmer and bloom cores */
+  let flameSpr = null;
+  function flameSprite() {
+    if (flameSpr) return flameSpr;
+    const w = 64, h = 96, c = G.assets.makeCanvas(w, h), x = c.getContext('2d');
+    const tongue = (k, c0, c1) => {
+      const W = w * 0.42 * k, top = h * (1 - 0.95 * k), cy = h - W;
+      x.beginPath(); x.moveTo(w / 2, top);
+      x.bezierCurveTo(w / 2 + W * 0.25, cy - (cy - top) * 0.45, w / 2 + W * 1.05, cy - W * 0.3, w / 2 + W, cy);
+      x.arc(w / 2, cy, W, 0, Math.PI); x.bezierCurveTo(w / 2 - W * 1.05, cy - W * 0.3, w / 2 - W * 0.25, cy - (cy - top) * 0.45, w / 2, top);
+      const g = x.createLinearGradient(0, top, 0, h); g.addColorStop(0, c0); g.addColorStop(1, c1); x.fillStyle = g; x.fill();
+    };
+    tongue(1, 'rgba(255,60,20,0)', 'rgba(255,80,20,0.85)');
+    tongue(0.72, 'rgba(255,150,40,0)', 'rgba(255,170,60,0.95)');
+    tongue(0.42, 'rgba(255,240,170,0)', 'rgba(255,250,210,1)');
+    flameSpr = c; return c;
+  }
+  function ensureDendroFx(R) {
+    if (!R || !G.weapons || !G.weapons.field) return;
+    if (R.dendroFx && R.fields.indexOf(R.dendroFx) >= 0) return;
+    R.dendroFx = G.weapons.field(R, { x: 0, y: 0, r: 0, life: 1e9, ground: false, draw: drawDendro });
+  }
+  function drawDendro(ctx) {
+    const R = G.run; if (!R) return;
+    const t = R.time, on = G.render.onScreen, glow = G.assets.glow;
+    const fs = flameSprite(), red = reduced();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < burning.length; i++) {
+      const e = burning[i]; if (e.dead || !(e.burnUntil > t) || !on(e.x, e.y, 2)) continue;
+      const H = e.def.h * (e.scale || 1), fade = Math.min(1, (e.burnUntil - t) / 0.6), n = red ? 1 : e.def.h > 3 ? 3 : 2;
+      ctx.globalAlpha = 0.22 * fade; ctx.drawImage(glow('#ff6a1a', 64), e.x - H * 0.45, e.y - H * 0.75, H * 0.9, H * 0.9);
+      for (let k = 0; k < n; k++) {
+        const ph = t * (9 + k * 2.3) + e.id * 1.7 + k * 2.1, fw = H * (0.28 - k * 0.04) * (1 + 0.08 * Math.sin(ph)), fh = fw * 1.6 * (1 + 0.14 * Math.sin(ph * 1.3));
+        const fx = e.x + (k - (n - 1) / 2) * H * 0.2 + Math.sin(ph * 0.7) * 0.05, fy = e.y - H * (0.12 + 0.08 * k);
+        ctx.globalAlpha = (0.9 - k * 0.15) * fade; ctx.drawImage(fs, fx - fw / 2, fy - fh, fw, fh);
+      }
+    }
+    // quicken: green-violet shimmer at the feet while the bonus window is open
+    for (let i = 0; i < R.enemies.length; i++) {
+      const e = R.enemies[i]; if (e.dead || !(e.quickenUntil > t) || !on(e.x, e.y, 1)) continue;
+      const left = e.quickenUntil - t, a = Math.min(1, left / 0.8) * (0.55 + 0.25 * Math.sin(t * 10 + e.id)), r = e.r * 1.5 + 0.25;
+      ctx.globalAlpha = a * 0.5; ctx.drawImage(glow('#9dff4a', 64), e.x - r, e.y - r * 0.5, r * 2, r);
+      ctx.globalAlpha = a; ctx.strokeStyle = '#c9ff7a'; ctx.lineWidth = 0.05;
+      ctx.beginPath(); ctx.ellipse(e.x, e.y, r * 0.8, r * 0.36, 0, t * 2, t * 2 + 4.4); ctx.stroke();
+      ctx.strokeStyle = '#d9a6ff'; ctx.beginPath(); ctx.ellipse(e.x, e.y, r * 0.8, r * 0.36, 0, t * 2 + 3.4, t * 2 + 5.4); ctx.stroke();
+    }
+    // bloom cores: a glowing seed that swells and blinks faster before it bursts
+    for (const c of cores) {
+      if (!on(c.x, c.y, 2)) continue;
+      const k = Math.min(1, c.t), r = 0.26 + 0.1 * k + 0.05 * Math.sin(t * (12 + 20 * k)), lift = 0.45 + 0.1 * Math.sin(c.t * 6);
+      ctx.globalAlpha = 0.85; ctx.drawImage(glow('#8fd13a', 64), c.x - r * 3.2, c.y - lift - r * 3.2, r * 6.4, r * 6.4);
+      ctx.globalAlpha = 1; ctx.fillStyle = '#eaffc8'; ctx.beginPath(); ctx.arc(c.x, c.y - lift, r * 0.75, 0, U.TAU); ctx.fill();
+      if (k > 0.55) { const w = (k - 0.55) / 0.45; ctx.globalAlpha = 0.35 * w; ctx.strokeStyle = '#b6ff6a'; ctx.lineWidth = 0.04; ctx.beginPath(); ctx.ellipse(c.x, c.y, 2.0 * w, 1.2 * w, 0, 0, U.TAU); ctx.stroke(); }
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
 
   /** apply an element without dealing damage (weather/aura effects) */
@@ -118,6 +256,7 @@ G.combat = (function () {
     }
     const r = applyElement(R, e, el, gauge, null);
     if (r.reaction) countReaction(R, r.reaction, e);
+    if (r.reaction === 'quicken' || r.reaction === 'burning') postReact(R, e, r.reaction);
     return r.reaction;
   }
 
@@ -165,10 +304,11 @@ G.combat = (function () {
    * returns damage dealt (0 if enemy invalid)
    */
   function hit(R, e, opts) {
-    if (!e || e.dead || (e.spawnT > 0.001 && e.invulnSpawn)) return 0;
+    if (!e || e.dead || e.dying || (e.spawnT > 0.001 && e.invulnSpawn)) return 0; // dying: a fallen god (js/godfall.js)
     const S = R.stats; const el = opts.element || 'physical';
     let dmg = opts.flat != null ? opts.flat : (opts.mul || 1) * S.atk;
     if (!opts.isReaction) dmg *= 1 + (S.dmgBonus || 0) + ((S.elBonus && S.elBonus[el]) || 0);
+    if (!opts.isReaction && e.quickenUntil > R.time && QUICKEN_BONUS[el]) dmg += reactionBase(R, QUICKEN_BONUS[el]); // 激化 bonus (crit applies)
     let crit = false;
     if (!opts.noCrit && U.rnd() < S.critRate + (opts.critBonus || 0)) { crit = true; dmg *= 1 + S.critDmg; }
     let reaction = null;
@@ -180,7 +320,7 @@ G.combat = (function () {
     if (reaction === 'shatter') dmg += reactionBase(R, 2.2);
     if (e.def.boss && e.armorMul) dmg *= e.armorMul;
     dmg = Math.max(1, Math.round(dmg * (0.95 + U.rnd() * 0.1)));
-    e.hp -= dmg; e.flash = 1; e.lastHit = R.time;
+    e.hp -= dmg; e.flash = opts.noFlash ? Math.max(e.flash || 0, 0.25) : 1; e.lastHit = R.time; // noFlash: DoT ticks (燃焼) don't strobe white
     R.damageDealt = (R.damageDealt || 0) + dmg;
     const src = opts.src || el;
     R.damageBySrc[src] = (R.damageBySrc[src] || 0) + dmg;
@@ -215,6 +355,7 @@ G.combat = (function () {
     }
     G.bus.emit('enemyHit', { enemy: e, dmg, crit, element: el, reaction, src: opts.src });
     if (e.hp <= 0) G.enemies.kill(R, e, src);
+    if (reaction === 'quicken' || reaction === 'burning') postReact(R, e, reaction);
     return dmg;
   }
 
@@ -255,6 +396,7 @@ G.combat = (function () {
   /** per-step status effects: electro-charged ticks; resets reaction budgets */
   function update(R, dt) {
     budget.overloaded = 5; budget.swirl = 7; budget.text = 10; budget.num = 1; budget.bigNum = 2;
+    dendroUpdate(R, dt);
     const now = R.time;
     for (let i = 0; i < R.enemies.length; i++) {
       const e = R.enemies[i];

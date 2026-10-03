@@ -63,7 +63,7 @@ G.debugPanel = (function () {
     let st; try { st = JSON.parse(raw); } catch (e) { return; }
     const S = G.save.data, settings = S.settings;
     if (st.full) { for (const k of Object.keys(S)) delete S[k]; Object.assign(S, st.full); S.settings = settings; }
-    else if (st.meta) { S.meta = st.meta.meta; if (st.meta.constellation === undefined) delete S.constellation; else S.constellation = st.meta.constellation; }
+    else if (st.meta) { if (st.meta.metaC !== undefined) S.metaC = st.meta.metaC; else if (st.meta.meta) S.meta = st.meta.meta; if (st.meta.constellation === undefined) delete S.constellation; else S.constellation = st.meta.constellation; }
     G.save.write();
   }
   G.bus.on('assetsReady', restoreSave);                                        // page reloaded in the middle of a debug run
@@ -82,10 +82,11 @@ G.debugPanel = (function () {
     const st = {};
     if (c.noRecord) st.full = JSON.parse(JSON.stringify(S));
     if (c.meta !== 'keep') {
-      st.meta = { meta: JSON.parse(JSON.stringify(S.meta || {})), constellation: S.constellation === undefined ? undefined : JSON.parse(JSON.stringify(S.constellation)) };
-      const M = {};
-      if (c.meta === 'max') for (const k in G.data.meta) M[k] = G.data.meta[k].max;
-      S.meta = M;
+      G.progression.metaLevels(c.char || 'amber'); // v6 refund/migration first (天賦の星図 is per character)
+      st.meta = { metaC: JSON.parse(JSON.stringify(S.metaC || {})), constellation: S.constellation === undefined ? undefined : JSON.parse(JSON.stringify(S.constellation)) };
+      const MC = {};
+      if (c.meta === 'max') for (const id of G.data.roster) { const M = MC[id] = {}; for (const k in G.data.meta) M[k] = G.progression.metaDef(k, id).max; }
+      S.metaC = MC;
       const con = (S.constellation && typeof S.constellation === 'object') ? Object.assign({}, S.constellation) : {};
       con[c.char || 'amber'] = c.meta === 'max' ? 6 : 0; S.constellation = con; // per-character constellations
     }
@@ -314,18 +315,15 @@ G.debugPanel = (function () {
 
   /* ---------------- 💾 セーブ編集: a draft of the real save, written only by「この設定をセーブに反映」 ---------------- */
   const unlockable = () => G.data.roster.filter(id => G.data.characters[id] && G.data.characters[id].unlock);
-  const metaShared = () => (G.data.metaOrder || Object.keys(G.data.meta)).filter(k => G.data.meta[k] && !G.data.meta[k].char);
-  const metaOfChar = id => Object.keys(G.data.meta).filter(k => G.data.meta[k].char === id);
-  function metaName(k, charId) {
-    const d = G.data.meta[k] || {};
-    if (d.char) return charName(d.char) + '・' + d.name;
-    const t = charId && G.progression.metaDef ? G.progression.metaDef(k, charId) : d;
-    return (t && t.name) || d.name || k;
-  }
+  // 天賦の星図 v6 (TALENT): one map per character — draft D.meta = { charId: { key: lv } }
+  const metaKeys = () => (G.data.metaOrder || Object.keys(G.data.meta)).filter(k => G.data.meta[k]);
+  const metaMax = (k, id) => (G.progression.metaDef(k, id) || {}).max || 0;
+  function metaName(k, charId) { const t = G.progression.metaDef(k, charId); return (t && t.name) || k; }
   function snapDraft() {
-    const S = G.save.data, UL = G.unlocks, M = S.meta || {};
+    const S = G.save.data, UL = G.unlocks;
     const d = { mora: Math.max(0, Math.floor(S.mora || 0)), meta: {}, cons: {}, chars: {}, cleared: {}, book: 'keep', relAdd: [], relEquip: D ? D.relEquip !== false : true, relClear: false, unopened: G.relics ? G.relics.data().unopened : 0 };
-    for (const k in G.data.meta) d.meta[k] = M[k] | 0;
+    for (const id of G.data.roster) { const M = G.progression.metaLevels(id), o = d.meta[id] = {}; for (const k of metaKeys()) o[k] = M[k] | 0; }
+    d.mora = Math.max(0, Math.floor(S.mora || 0)); // after a possible v6 refund
     for (const id of G.data.roster) d.cons[id] = G.progression.constellationLevel(id);
     if (UL) { for (const id of unlockable()) d.chars[id] = UL.charState(id) === 'open'; for (const s of stages()) d.cleared[s.id] = UL.isCleared(s.id); }
     return d;
@@ -335,8 +333,10 @@ G.debugPanel = (function () {
     if (!D) return [];
     const B0 = snapDraft(), out = [], f = U.fmtNum;
     if (D.mora !== B0.mora) out.push('所持モラ ' + f(B0.mora) + ' → ' + f(D.mora));
-    const mk = Object.keys(D.meta).filter(k => (D.meta[k] | 0) !== (B0.meta[k] | 0));
-    if (mk.length) out.push('天賦の星図 ' + mk.length + 'か所（' + mk.slice(0, 4).map(k => metaName(k) + ' ' + B0.meta[k] + '→' + D.meta[k]).join('、') + (mk.length > 4 ? ' …' : '') + '）');
+    for (const id in D.meta) {
+      const a = B0.meta[id] || {}, b = D.meta[id], mk = Object.keys(b).filter(k => (b[k] | 0) !== (a[k] | 0));
+      if (mk.length) out.push('天賦の星図（' + charName(id) + '）' + mk.length + 'か所（' + mk.slice(0, 4).map(k => metaName(k, id) + ' ' + (a[k] | 0) + '→' + b[k]).join('、') + (mk.length > 4 ? ' …' : '') + '）');
+    }
     for (const id in D.cons) if (D.cons[id] !== B0.cons[id]) out.push('命ノ星座 ' + charName(id) + ' C' + B0.cons[id] + ' → C' + D.cons[id]);
     for (const id in D.chars) if (D.chars[id] !== B0.chars[id]) out.push('キャラ解放 ' + charName(id) + ' → ' + (D.chars[id] ? '解放' : 'ロック'));
     for (const id in D.cleared) if (D.cleared[id] !== B0.cleared[id]) out.push('ステージ ' + stName(id) + ' → ' + (D.cleared[id] ? 'クリア済' : '未クリア'));
@@ -362,9 +362,10 @@ G.debugPanel = (function () {
       const S = G.save.data, UL = G.unlocks, B0 = snapDraft();
       ls.set(K_BAK, JSON.stringify({ at: Date.now(), n: list.length, data: S }));
       S.mora = Math.max(0, Math.floor(+D.mora || 0));
-      const M = Object.assign({}, S.meta || {});
-      for (const k in D.meta) { const v = U.clamp(D.meta[k] | 0, 0, G.data.meta[k].max); if (v > 0) M[k] = v; else delete M[k]; }
-      S.meta = M;
+      for (const id in D.meta) {
+        const M = G.progression.metaLevels(id, true);
+        for (const k in D.meta[id]) { const v = U.clamp(D.meta[id][k] | 0, 0, metaMax(k, id)); if (v > 0) M[k] = v; else delete M[k]; }
+      }
       for (const id in D.cons) if (D.cons[id] !== B0.cons[id]) G.progression.setConstellation(id, D.cons[id]);
       if (UL) {
         for (const id in D.cleared) if (D.cleared[id] !== B0.cleared[id]) UL.setCleared(id, D.cleared[id]);
@@ -420,18 +421,16 @@ G.debugPanel = (function () {
         B('+50,000', () => { D.mora += 50000; render(); }, 'sm')),
       el('p', { class: 'dbg-note' }, 'いまのセーブ ' + f(G.save.data.mora || 0) + ' モラ')));
     // star map
-    const setM = (k, v) => { D.meta[k] = U.clamp(v | 0, 0, G.data.meta[k].max); render(); };
-    const allM = (keys, max) => { for (const k of keys) D.meta[k] = max ? G.data.meta[k].max : 0; render(); };
-    const allKeys = Object.keys(G.data.meta);
-    const mcKeys = metaOfChar(metaChar), mcName = (G.data.metaChar && G.data.metaChar[metaChar] || {}).name || '専用の星';
-    b.append(sec('天賦の星図（ノードごとのLv）',
-      row(B('星図 全部0', () => allM(allKeys, false), 'sm'), B('星図 全部MAX', () => allM(allKeys, true), 'sm gold'),
-        B('共通の星だけMAX', () => allM(metaShared(), true), 'sm'), B('全キャラの専用の星MAX', () => allM(allKeys.filter(k => G.data.meta[k].char), true), 'sm')),
-      el('h5', null, '共通の星（全キャラ）'),
-      el('div', { class: 'dbg-grid' }, metaShared().map(k => lvRow(metaName(k), D.meta[k] | 0, G.data.meta[k].max, v => setM(k, v), '', k))),
-      el('h5', null, '専用の枝'), charSeg(metaChar, v => { metaChar = v; }),
-      el('div', { class: 'dbg-grid' }, mcKeys.map(k => lvRow(mcName + '・' + G.data.meta[k].name, D.meta[k] | 0, G.data.meta[k].max, v => setM(k, v), '', k))),
-      row(B(charName(metaChar) + 'の専用の星 MAX', () => allM(mcKeys, true), 'sm'), B(charName(metaChar) + 'の専用の星 0', () => allM(mcKeys, false), 'sm'))));
+    const MD = D.meta[metaChar] || (D.meta[metaChar] = {});
+    const setM = (k, v) => { MD[k] = U.clamp(v | 0, 0, metaMax(k, metaChar)); render(); };
+    const allM = (ids, max) => { for (const id of ids) { const o = D.meta[id] || (D.meta[id] = {}); for (const k of metaKeys()) o[k] = max ? metaMax(k, id) : 0; } render(); };
+    const TRB = G.data.metaTree.branches, TRN = G.data.metaTree.nodes;
+    b.append(sec('天賦の星図（キャラごと・ノードごとのLv）',
+      charSeg(metaChar, v => { metaChar = v; }),
+      row(B(charName(metaChar) + ' 全部0', () => allM([metaChar], false), 'sm'), B(charName(metaChar) + ' 全部MAX', () => allM([metaChar], true), 'sm gold'),
+        B('全キャラ 全部0', () => allM(G.data.roster, false), 'sm'), B('全キャラ 全部MAX', () => allM(G.data.roster, true), 'sm')),
+      ...Object.keys(TRB).map(br => [el('h5', null, TRB[br].name),
+        el('div', { class: 'dbg-grid' }, metaKeys().filter(k => TRN[k] && TRN[k].br === br).map(k => lvRow(metaName(k, metaChar), MD[k] | 0, metaMax(k, metaChar), v => setM(k, v), '', k)))]).flat()));
     // constellations
     const setC = (id, v) => { D.cons[id] = U.clamp(v | 0, 0, 6); render(); };
     b.append(sec('命ノ星座（キャラごと）',

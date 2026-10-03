@@ -58,14 +58,17 @@ G.enemies = (function () {
 
   function kill(R, e, src) {
     if (e.dead) return;
+    // v6: a stage god doesn't just pop — it freezes, speaks, fades, and only then dies (js/godfall.js)
+    if (e.def.final && !e.godfallDone && G.godfall) { G.godfall.begin(R, e, src); return; }
     e.dead = true; e.hp = 0; e.tele = null; e.held = null;
     R.kills++; R.combo++; R.comboTimer = 2.2; if (R.combo > R.maxCombo) R.maxCombo = R.combo;
     G.loot.onEnemyKilled(R, e);
     G.fx.death ? G.fx.death(e) : null;
     if (e.boss || e.elite) FX.burst(e.x, e.y - e.def.h * 0.4, e.def.h * (e.boss ? 0.9 : 0.6), U.randi(0, 3));
-    FX.sfx(e.boss ? 'bossDeath' : e.elite ? 'eliteDeath' : 'kill', e.x, e.y, e.boss || e.elite);
+    if (e.godfallDone) G.audio.sfx('bossDeath', { x: e.x, y: e.y, somber: true }); // no fanfare: the music is gone and it rains
+    else FX.sfx(e.boss ? 'bossDeath' : e.elite ? 'eliteDeath' : 'kill', e.x, e.y, e.boss || e.elite);
     G.bus.emit('enemyKilled', { enemy: e, src });
-    if (e === R.boss) { R.boss = null; G.bus.emit('bossKilled', e); }
+    if (e === R.boss || e.godfallDone) { if (R.boss === e) R.boss = null; G.bus.emit('bossKilled', e); }
   }
 
   /* shaman bubble: absorbs part of incoming damage */
@@ -81,6 +84,7 @@ G.enemies = (function () {
     const es = R.enemies, AI = G.enemyAI;
     for (let i = 0; i < es.length; i++) {
       const e = es[i]; if (e.dead) continue;
+      if (e.dying) { if (e.flash > 0) e.flash -= dt * 2; e.anim.t += dt * 0.25; continue; } // falling god: frozen in place, harmless
       if (e.dieAt && now >= e.dieAt) { FX.pop(e.x, e.y - e.def.h * 0.4, '#ffd27a'); kill(R, e, e.dieSrc || 'finale'); continue; }
       if (e.flash > 0) e.flash -= dt * 7;
       if (e.spawnT > 0) { e.spawnT -= dt; if (e.spawnT <= 0) { e.invulnSpawn = false; if (e.boss || e.elite) FX.ring(e.x, e.y, e.r * 3, 0.5, 0.18); } else continue; }
@@ -296,6 +300,13 @@ G.enemies = (function () {
   const ST_RATE = { idle: 2.2, walk: 7, attack: 5 };
 
   function drawEnemy(ctx, e) {
+    if (!e.dying) return drawEnemy0(ctx, e);
+    const a = G.godfall ? G.godfall.godAlpha(G.run, e) : 1; if (a <= 0.01) return;
+    const a0 = ctx.globalAlpha; ctx.globalAlpha = a0 * a;
+    drawEnemy0(ctx, e);
+    ctx.globalAlpha = a0;
+  }
+  function drawEnemy0(ctx, e) {
     const def = e.def, R = G.run, t = R.time;
     const K = kindSprites(def); if (!K || !K.img) return;
     const q = G.save.data.settings.reducedFx ? 0 : (G.quality ? G.quality.level : 3);
@@ -354,7 +365,7 @@ G.enemies = (function () {
     if (atk && q >= 2 && !e.enraged) { ctx.globalCompositeOperation = 'lighter'; drawSil(ctx, def.atlas, '#7a22ff', x, y, H, row, col, sx, sy, 0.12 + 0.08 * Math.sin(t * 14 + e.id)); ctx.globalCompositeOperation = 'source-over'; }
     if (e.enraged && q >= 2) { ctx.globalCompositeOperation = 'lighter'; drawSil(ctx, def.atlas, '#ff2a6a', x, y, H, row, col, sx, sy, 0.16 + 0.1 * Math.sin(t * 10)); ctx.globalCompositeOperation = 'source-over'; }
     // boss/AI extras (weak-spot core, lifted boulder, casting orb, wind aura…)
-    if ((e.held || e.charge || e.boss) && G.enemyAI && G.enemyAI.drawExtra) G.enemyAI.drawExtra(ctx, e, x, y, H, t);
+    if ((e.held || e.charge || e.boss) && !e.dying && G.enemyAI && G.enemyAI.drawExtra) G.enemyAI.drawExtra(ctx, e, x, y, H, t);
     if (e.bubble > 0) {
       const by = y - H * 0.45, br = H * 0.42;
       ctx.globalAlpha = 0.22; ctx.fillStyle = '#5ab8ff'; ctx.beginPath(); ctx.arc(x, by, br, 0, U.TAU); ctx.fill();

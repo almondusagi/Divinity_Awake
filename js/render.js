@@ -562,6 +562,7 @@ G.render = (function () {
     ctx.restore();
     // screen space
     ctx.setTransform(V.dpr, 0, 0, V.dpr, 0, 0);
+    G.godfall && G.godfall.drawScreen(ctx); // v6: dim + rain after the god falls
     G.fx.drawScreen && G.fx.drawScreen(ctx);
     G.hud && G.hud.draw(ctx);
     if (PT) { const n = performance.now(); PT.rest = (PT.rest || 0) + n - pt0; PT.frames = (PT.frames || 0) + 1; }
